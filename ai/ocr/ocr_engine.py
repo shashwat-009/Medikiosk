@@ -1,6 +1,7 @@
-
 from pathlib import Path
+from typing import Any
 
+import cv2
 from paddleocr import PaddleOCR
 
 
@@ -8,15 +9,22 @@ from paddleocr import PaddleOCR
 # CONFIGURATION
 # ============================================================
 
-INPUT_IMAGE = Path("ai/ocr/test_images/cbcreport.jpg")
-
-# Minimum confidence used only for filtering extremely weak
-# OCR detections.
-#
-# IMPORTANT:
-# We keep this relatively low because medical documents can
-# contain faint text. Do NOT aggressively filter OCR here.
 MIN_CONFIDENCE = 0.30
+
+# Maximum image size sent to OCR.
+MAX_INPUT_SIDE = 1600
+
+# Text detection configuration.
+# Slightly more permissive than the previous configuration so
+# that characters near the beginning/end of a line are retained.
+TEXT_DET_LIMIT_SIDE_LEN = 1280
+TEXT_DET_LIMIT_TYPE = "max"
+
+TEXT_DET_THRESH = 0.20
+TEXT_DET_BOX_THRESH = 0.35
+TEXT_DET_UNCLIP_RATIO = 1.8
+
+TEXT_RECOGNITION_BATCH_SIZE = 1
 
 
 # ============================================================
@@ -26,7 +34,6 @@ MIN_CONFIDENCE = 0.30
 class OCREngine:
 
     def __init__(self):
-
         print("=" * 60)
         print("                  OCR ENGINE")
         print("=" * 60)
@@ -34,257 +41,130 @@ class OCREngine:
         print("Initializing PaddleOCR...")
 
         self.ocr = PaddleOCR(
-            lang="en"
+            lang="en",
+
+            # Required for the current Windows CPU setup.
+            enable_mkldnn=False,
+
+            # Detection configuration.
+            text_det_limit_side_len=TEXT_DET_LIMIT_SIDE_LEN,
+            text_det_limit_type=TEXT_DET_LIMIT_TYPE,
+            text_det_thresh=TEXT_DET_THRESH,
+            text_det_box_thresh=TEXT_DET_BOX_THRESH,
+            text_det_unclip_ratio=TEXT_DET_UNCLIP_RATIO,
+
+            # Keep recognition lightweight.
+            text_recognition_batch_size=TEXT_RECOGNITION_BATCH_SIZE,
         )
 
         print("PaddleOCR initialized.")
-        print()
-
-    # ========================================================
-    # RUN OCR
-    # ========================================================
-
-    def run(self, image_path):
-
-        image_path = Path(image_path)
-
-        print("=" * 60)
-        print("                  OCR PROCESS")
         print("=" * 60)
 
-        if not image_path.exists():
 
-            print("Status : ERROR")
-            print(f"File not found: {image_path}")
+    # ========================================================
+    # IMAGE PREPARATION
+    # ========================================================
 
-            return []
+    def _prepare_input(
+        self,
+        image_path: str
+    ) -> tuple[str, bool]:
 
-        print(f"Input  : {image_path}")
-        print("Running PaddleOCR...")
-        print()
+        path = Path(image_path)
 
-        try:
-
-            results = self.ocr.predict(
-                str(image_path)
-            )
-
-        except Exception as exc:
-
-            print()
-            print("Status : ERROR")
-            print("PaddleOCR failed.")
-            print(f"Reason : {exc}")
-
-            return []
-
-        # ----------------------------------------------------
-        # Convert PaddleOCR output into our own stable format
-        # ----------------------------------------------------
-
-        all_text = []
-
-        for result in results:
-
-            texts = result.get(
-                "rec_texts",
-                []
-            )
-
-            scores = result.get(
-                "rec_scores",
-                []
-            )
-
-            boxes = result.get(
-                "rec_polys",
-                []
-            )
-
-            for index, text in enumerate(texts):
-
-                text = str(text).strip()
-
-                if not text:
-                    continue
-
-                # --------------------------------------------
-                # Confidence
-                # --------------------------------------------
-
-                confidence = 0.0
-
-                if index < len(scores):
-
-                    try:
-
-                        confidence = float(
-                            scores[index]
-                        )
-
-                    except (
-                        TypeError,
-                        ValueError
-                    ):
-
-                        confidence = 0.0
-
-                # --------------------------------------------
-                # Bounding box
-                # --------------------------------------------
-
-                bbox = None
-
-                if index < len(boxes):
-
-                    bbox = self._convert_bbox(
-                        boxes[index]
-                    )
-
-                # --------------------------------------------
-                # Weak OCR filtering
-                # --------------------------------------------
-
-                if confidence < MIN_CONFIDENCE:
-
-                    continue
-
-                # --------------------------------------------
-                # Calculate spatial information
-                # --------------------------------------------
-
-                x = None
-                y = None
-                width = None
-                height = None
-
-                if bbox:
-
-                    x1, y1, x2, y2 = bbox
-
-                    x = (x1 + x2) / 2
-                    y = (y1 + y2) / 2
-
-                    width = x2 - x1
-                    height = y2 - y1
-
-                # --------------------------------------------
-                # Store OCR item
-                # --------------------------------------------
-
-                all_text.append({
-
-                    "text": text,
-
-                    "confidence": round(
-                        confidence,
-                        3
-                    ),
-
-                    "bbox": bbox,
-
-                    "x": x,
-                    "y": y,
-
-                    "width": width,
-                    "height": height
-
-                })
-
-        # ====================================================
-        # SORT SPATIALLY
-        # ====================================================
-
-        all_text = self._sort_ocr_results(
-            all_text
+        image = cv2.imread(
+            str(path),
+            cv2.IMREAD_COLOR
         )
 
-        # ====================================================
-        # PRINT RESULTS
-        # ====================================================
+        if image is None:
+            raise ValueError(
+                f"Could not read image: {image_path}"
+            )
 
-        print("=" * 60)
-        print("                  OCR RESULT")
-        print("=" * 60)
+        height, width = image.shape[:2]
 
-        if not all_text:
+        largest_side = max(
+            width,
+            height
+        )
 
-            print("No text detected.")
+        # Keep original image if it is already within limits.
+        if largest_side <= MAX_INPUT_SIDE:
+            return str(path), False
 
-        else:
+        scale = (
+            MAX_INPUT_SIDE
+            / largest_side
+        )
 
-            for item in all_text:
+        new_width = max(
+            1,
+            int(width * scale)
+        )
 
-                print(
-                    f"{item['text']} "
-                    f"[confidence: "
-                    f"{item['confidence']:.2f}]"
-                )
+        new_height = max(
+            1,
+            int(height * scale)
+        )
 
-                if item["bbox"]:
+        resized = cv2.resize(
+            image,
+            (
+                new_width,
+                new_height
+            ),
+            interpolation=cv2.INTER_AREA
+        )
 
-                    print(
-                        f"  bbox   : "
-                        f"{item['bbox']}"
-                    )
+        resized_path = (
+            path.parent
+            / f".ocr_resized_{path.name}"
+        )
 
-                    print(
-                        f"  center : "
-                        f"({item['x']:.1f}, "
-                        f"{item['y']:.1f})"
-                    )
+        success = cv2.imwrite(
+            str(resized_path),
+            resized
+        )
 
-        print("=" * 60)
+        if not success:
+            raise RuntimeError(
+                "Failed to create resized OCR image."
+            )
 
         print(
-            f"Total text lines: "
-            f"{len(all_text)}"
+            f"OCR input resized to: {resized_path}"
         )
 
-        print("=" * 60)
+        return str(resized_path), True
 
-        return all_text
 
     # ========================================================
-    # BBOX CONVERSION
+    # POLYGON → BOUNDING BOX
     # ========================================================
 
     @staticmethod
-    def _convert_bbox(poly):
-
-        """
-        PaddleOCR may return polygon points such as:
-
-        [
-            [x1, y1],
-            [x2, y2],
-            [x3, y3],
-            [x4, y4]
-        ]
-
-        Convert this into:
-
-        [min_x, min_y, max_x, max_y]
-        """
+    def _polygon_to_bbox(
+        polygon: Any
+    ) -> dict:
 
         try:
 
-            points = []
-
-            for point in poly:
-
-                if len(point) >= 2:
-
-                    x = float(point[0])
-                    y = float(point[1])
-
-                    points.append(
-                        (x, y)
-                    )
+            points = [
+                (
+                    float(point[0]),
+                    float(point[1])
+                )
+                for point in polygon
+            ]
 
             if not points:
-
-                return None
+                return {
+                    "x": 0,
+                    "y": 0,
+                    "width": 0,
+                    "height": 0,
+                }
 
             xs = [
                 point[0]
@@ -296,69 +176,230 @@ class OCREngine:
                 for point in points
             ]
 
-            return [
-                round(min(xs), 2),
-                round(min(ys), 2),
-                round(max(xs), 2),
-                round(max(ys), 2)
-            ]
+            min_x = min(xs)
+            max_x = max(xs)
+            min_y = min(ys)
+            max_y = max(ys)
+
+            return {
+                "x": int(min_x),
+                "y": int(min_y),
+                "width": int(
+                    max_x - min_x
+                ),
+                "height": int(
+                    max_y - min_y
+                ),
+            }
 
         except Exception:
 
-            return None
+            return {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+            }
+
 
     # ========================================================
-    # SPATIAL SORT
+    # RESULT EXTRACTION
     # ========================================================
 
-    @staticmethod
-    def _sort_ocr_results(items):
+    def _extract_results(
+        self,
+        result
+    ) -> list[dict]:
 
-        """
-        Sort OCR results approximately:
+        extracted = []
 
-        top → bottom
-        left → right
+        if result is None:
+            return extracted
 
-        We use the vertical center as the primary value.
+        # PaddleOCR 3.x returns a list-like result.
+        if not isinstance(
+            result,
+            (list, tuple)
+        ):
+            result = [result]
 
-        Small Y differences are grouped into the same row.
-        """
+        for page_result in result:
 
-        items = [
-            item
-            for item in items
-            if item.get("x") is not None
-            and item.get("y") is not None
-        ]
+            if page_result is None:
+                continue
 
-        # ----------------------------------------------------
-        # Sort by Y first
-        # ----------------------------------------------------
+            # PaddleOCR 3.x result object behaves like a
+            # dictionary for these fields.
+            try:
+                texts = page_result.get(
+                    "rec_texts",
+                    []
+                )
 
-        items.sort(
+                scores = page_result.get(
+                    "rec_scores",
+                    []
+                )
+
+                polygons = page_result.get(
+                    "rec_polys",
+                    []
+                )
+
+            except AttributeError:
+                continue
+
+            for index, text in enumerate(texts):
+
+                if text is None:
+                    continue
+
+                text = str(text).strip()
+
+                if not text:
+                    continue
+
+                try:
+                    confidence = float(
+                        scores[index]
+                    )
+                except (
+                    IndexError,
+                    TypeError,
+                    ValueError
+                ):
+                    confidence = 0.0
+
+                if confidence < MIN_CONFIDENCE:
+                    continue
+
+                try:
+                    polygon = polygons[index]
+                except IndexError:
+                    polygon = []
+
+                bbox = self._polygon_to_bbox(
+                    polygon
+                )
+
+                extracted.append(
+                    {
+                        "text": text,
+                        "confidence": round(
+                            confidence,
+                            4
+                        ),
+                        "bbox": bbox,
+                        "x": bbox["x"],
+                        "y": bbox["y"],
+                        "width": bbox["width"],
+                        "height": bbox["height"],
+                    }
+                )
+
+        # ====================================================
+        # SORT TOP → BOTTOM, LEFT → RIGHT
+        # ====================================================
+
+        extracted.sort(
             key=lambda item: (
                 item["y"],
                 item["x"]
             )
         )
 
-        return items
+        return extracted
+
+
+    # ========================================================
+    # RUN OCR
+    # ========================================================
+
+    def run(
+        self,
+        image_path: str
+    ) -> list[dict]:
+
+        print("=" * 60)
+        print("                  OCR PROCESS")
+        print("=" * 60)
+
+        print(
+            f"Input: {image_path}"
+        )
+
+        prepared_path = None
+        temporary_file = False
+
+        try:
+
+            prepared_path, temporary_file = (
+                self._prepare_input(
+                    image_path
+                )
+            )
+
+            print(
+                "Running PaddleOCR..."
+            )
+
+            result = self.ocr.predict(
+                prepared_path
+            )
+
+            extracted = (
+                self._extract_results(
+                    result
+                )
+            )
+
+            print()
+
+            print(
+                f"Detected text lines: "
+                f"{len(extracted)}"
+            )
+
+            for item in extracted:
+
+                print(
+                    f'{item["text"]} '
+                    f'[{item["confidence"]:.2f}]'
+                )
+
+            return extracted
+
+        finally:
+
+            # Remove temporary resized image.
+            if (
+                temporary_file
+                and prepared_path
+            ):
+
+                try:
+                    Path(
+                        prepared_path
+                    ).unlink(
+                        missing_ok=True
+                    )
+
+                except Exception:
+                    pass
 
 
 # ============================================================
-# GLOBAL ENGINE
+# SINGLETON ENGINE
 # ============================================================
 
 _engine = None
 
 
-def get_ocr_engine():
+def get_ocr_engine() -> OCREngine:
 
     global _engine
 
     if _engine is None:
-
         _engine = OCREngine()
 
     return _engine
@@ -368,7 +409,9 @@ def get_ocr_engine():
 # PUBLIC FUNCTION
 # ============================================================
 
-def run_ocr(image_path):
+def run_ocr(
+    image_path: str
+) -> list[dict]:
 
     engine = get_ocr_engine()
 
@@ -378,12 +421,42 @@ def run_ocr(image_path):
 
 
 # ============================================================
-# MAIN
+# CLI TEST
 # ============================================================
 
 if __name__ == "__main__":
 
-    run_ocr(
-        INPUT_IMAGE
+    print("=" * 60)
+    print("             MEDIKIOSK OCR TEST")
+    print("=" * 60)
+
+    test_image = Path(
+        "processed/enhanced_ocr_test.png"
     )
 
+    if not test_image.exists():
+
+        print(
+            f"Test image not found: "
+            f"{test_image}"
+        )
+
+    else:
+
+        results = run_ocr(
+            str(test_image)
+        )
+
+        print()
+        print("=" * 60)
+        print("OCR RESULT")
+        print("=" * 60)
+
+        for item in results:
+
+            print(
+                f'{item["text"]} '
+                f'[{item["confidence"]:.2f}]'
+            )
+
+    print("=" * 60)

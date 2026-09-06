@@ -1,1045 +1,1620 @@
+"""
+MediKiosk Clinical Entity Extractor
 
-import json
+Consumes REAL OCR output from PaddleOCR.
+
+The extractor is layout-aware and uses OCR coordinates to reconstruct
+clinical tables such as medication and laboratory tables.
+
+Expected OCR item:
+{
+    "text": "...",
+    "confidence": 0.99,
+    "bbox": {
+        "x": 100,
+        "y": 200,
+        "width": 100,
+        "height": 20
+    },
+    "x": 100,
+    "y": 200,
+    "width": 100,
+    "height": 20
+}
+"""
+
+from __future__ import annotations
+
 import re
-from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
-# ============================================================
-# CLINICAL ENTITY EXTRACTION
-# ============================================================
+# ============================================================================
+# PATTERNS
+# ============================================================================
 
-BASE_DIR = Path(__file__).resolve().parent
+DATE_PATTERN = re.compile(
+    r"\b\d{1,2}\s+"
+    r"(?:January|February|March|April|May|June|July|August|September|"
+    r"October|November|December)\s+\d{4}\b",
+    re.IGNORECASE,
+)
+
+DOSAGE_PATTERN = re.compile(
+    r"^\s*\d+(?:\.\d+)?\s*"
+    r"(?:mg|mcg|g|kg|ml|mL|IU|units?|sachet|tablet|tablets|"
+    r"capsule|capsules)\s*$",
+    re.IGNORECASE,
+)
+
+DURATION_PATTERN = re.compile(
+    r"^\s*\d+(?:\.\d+)?\s*"
+    r"(?:day|days|week|weeks|month|months|hour|hours)\s*$",
+    re.IGNORECASE,
+)
+
+REFERENCE_RANGE_PATTERN = re.compile(
+    r"^\s*\d[\d,]*(?:\.\d+)?\s*[-–—]\s*\d[\d,]*(?:\.\d+)?\s*$"
+)
+
+NUMERIC_PATTERN = re.compile(
+    r"^\s*\d[\d,]*(?:\.\d+)?\s*$"
+)
+
+UNIT_PATTERN = re.compile(
+    r"^\s*(?:"
+    r"g/dl|mg/dl|mg/l|g/l|u/l|iu/l|"
+    r"/μl|/ul|%|mmol/l|meq/l|ng/ml|pg/ml|fl|"
+    r"bpm|mmhg|cm|kg|ml|mg|g"
+    r")\s*$",
+    re.IGNORECASE,
+)
 
 
-# ============================================================
-# HELPERS
-# ============================================================
+# ============================================================================
+# MEDICATION VALUES
+# ============================================================================
 
-def load_json(filename):
-    path = BASE_DIR / filename
+ROUTE_VALUES = {
+    "oral",
+    "intravenous",
+    "iv",
+    "intramuscular",
+    "im",
+    "subcutaneous",
+    "sc",
+    "topical",
+    "sublingual",
+    "inhaled",
+    "rectal",
+    "nasal",
+    "ophthalmic",
+    "otic",
+}
 
-    if not path.exists():
-        return {}
+FREQUENCY_PATTERNS = (
+    "once daily",
+    "twice daily",
+    "three times daily",
+    "four times daily",
+    "thrice daily",
+    "once a day",
+    "twice a day",
+    "three times a day",
+    "every morning",
+    "every night",
+    "at night",
+    "as needed",
+    "prn",
+)
 
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
 
-    except Exception as e:
-        print(f"Warning: Could not read {filename}: {e}")
-        return {}
+# ============================================================================
+# NON-MEDICATION CLINICAL HEADERS
+# ============================================================================
+
+MEDICATION_STOP_HEADERS = {
+    "allergies",
+    "drug allergies",
+    "allergy",
+    "advice",
+    "discharge advice",
+    "follow-up",
+    "follow up",
+    "red-flag advice",
+    "red flag advice",
+    "red flags",
+    "doctor",
+    "hospital",
+    "laboratory",
+    "laboratory comment",
+    "important",
+}
 
 
-def clean_text(value):
+MEDICATION_TABLE_HEADERS = {
+    "medicine",
+    "medication",
+    "medications",
+    "dose",
+    "dosage",
+    "route",
+    "frequency",
+    "duration",
+}
+
+
+# ============================================================================
+# LAB NAME NORMALIZATION
+# ============================================================================
+
+LAB_ALIASES = {
+    "hemoglobin": "Hemoglobin",
+    "haemoglobin": "Hemoglobin",
+    "hb": "Hemoglobin",
+    "wbc count": "WBC Count",
+    "wbc": "WBC Count",
+    "white blood cell count": "WBC Count",
+    "white blood cells": "WBC Count",
+    "platelet count": "Platelet Count",
+    "platelets": "Platelet Count",
+    "neutrophils": "Neutrophils",
+    "lymphocytes": "Lymphocytes",
+    "crp": "CRP",
+    "creatinine": "Creatinine",
+    "alt": "ALT",
+    "ast": "AST",
+    "bilirubin": "Bilirubin",
+    "glucose": "Glucose",
+    "hba1c": "HbA1c",
+    "sodium": "Sodium",
+    "potassium": "Potassium",
+    "urea": "Urea",
+    "tsh": "TSH",
+    "t3": "T3",
+    "t4": "T4",
+}
+
+
+# ============================================================================
+# BASIC HELPERS
+# ============================================================================
+
+def normalize_text(value: Any) -> str:
     if value is None:
+        return ""
+
+    text = str(value).strip()
+
+    replacements = {
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2212": "-",
+        "\u00a0": " ",
+    }
+
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def clean_value(value: Optional[str]) -> Optional[str]:
+    value = normalize_text(value)
+
+    if not value:
         return None
 
-    if not isinstance(value, str):
-        return value
-
-    value = re.sub(r"\s+", " ", value)
-
-    return value.strip()
+    return value
 
 
-# ============================================================
-# MEDICATION EXTRACTION
-# ============================================================
+# ============================================================================
+# OCR NORMALIZATION
+# ============================================================================
 
-def extract_medications(data):
+def normalize_ocr_results(
+    ocr_results: Any,
+) -> List[Dict[str, Any]]:
+    """
+    Normalize actual PaddleOCR output.
 
-    medications = []
+    Preferred input:
+        page["ocr_text"]
 
-    source_medications = data.get("medications", [])
+    Also accepts:
+        {"ocr_text": [...]}
+        {"results": [...]}
+        plain text as a fallback.
 
-    if not isinstance(source_medications, list):
-        return medications
+    IMPORTANT:
+    When structured OCR items are supplied, their coordinates are preserved.
+    """
 
-    for med in source_medications:
+    if isinstance(ocr_results, dict):
 
-        # ----------------------------------------------------
-        # Medication stored as simple string
-        # ----------------------------------------------------
+        if isinstance(ocr_results.get("ocr_text"), list):
+            ocr_results = ocr_results["ocr_text"]
 
-        if isinstance(med, str):
+        elif isinstance(ocr_results.get("results"), list):
+            ocr_results = ocr_results["results"]
 
-            medications.append({
-                "name": clean_text(med),
-                "dosage": None,
-                "route": None,
-                "frequency": None,
-                "duration": None,
-                "instructions": None
-            })
+        elif isinstance(ocr_results.get("text"), str):
+            ocr_results = ocr_results["text"]
 
+    # ------------------------------------------------------------------------
+    # Plain-text fallback
+    # ------------------------------------------------------------------------
+
+    if isinstance(ocr_results, str):
+
+        output = []
+
+        for index, line in enumerate(
+            ocr_results.splitlines()
+        ):
+
+            text = normalize_text(line)
+
+            if not text:
+                continue
+
+            output.append(
+                {
+                    "text": text,
+                    "confidence": 1.0,
+                    "x": 0.0,
+                    "y": float(index * 30),
+                    "width": float(
+                        max(len(text) * 8, 1)
+                    ),
+                    "height": 20.0,
+                }
+            )
+
+        return output
+
+    if not isinstance(ocr_results, list):
+        return []
+
+    output = []
+
+    for item in ocr_results:
+
+        if not isinstance(item, dict):
             continue
 
-        # ----------------------------------------------------
-        # Medication stored as dictionary
-        # ----------------------------------------------------
-
-        if not isinstance(med, dict):
-            continue
-
-        medication_name = (
-            med.get("name")
-            or med.get("medication")
-            or med.get("drug")
-            or med.get("medicine")
+        text = normalize_text(
+            item.get("text")
         )
 
-        medications.append({
-            "name": clean_text(medication_name),
-            "dosage": clean_text(med.get("dosage")),
-            "route": clean_text(med.get("route")),
-            "frequency": clean_text(med.get("frequency")),
-            "duration": clean_text(med.get("duration")),
-            "instructions": clean_text(med.get("instructions"))
-        })
+        if not text:
+            continue
 
-    return medications
+        bbox = item.get("bbox") or {}
+
+        def number(
+            direct_key: str,
+            bbox_key: str,
+            default: float = 0.0,
+        ) -> float:
+
+            value = item.get(
+                direct_key,
+                bbox.get(
+                    bbox_key,
+                    default,
+                ),
+            )
+
+            try:
+                return float(value)
+            except (
+                TypeError,
+                ValueError,
+            ):
+                return default
+
+        output.append(
+            {
+                "text": text,
+                "confidence": number(
+                    "confidence",
+                    "confidence",
+                    1.0,
+                ),
+                "x": number("x", "x"),
+                "y": number("y", "y"),
+                "width": number(
+                    "width",
+                    "width",
+                ),
+                "height": number(
+                    "height",
+                    "height",
+                ),
+            }
+        )
+
+    return output
 
 
-# ============================================================
-# DIAGNOSIS EXTRACTION
-# ============================================================
+def ocr_to_text(
+    ocr_results: Any,
+) -> str:
 
-def extract_diagnoses(data):
+    items = normalize_ocr_results(
+        ocr_results
+    )
+
+    return "\n".join(
+        item["text"]
+        for item in items
+    )
+
+
+# ============================================================================
+# HEADER NORMALIZATION
+# ============================================================================
+
+def normalize_header(
+    text: str,
+) -> str:
+    """
+    Normalize a clinical section/header.
+
+    Examples:
+        "Allergies" -> "allergies"
+        "Allergies: No known drug allergies" -> "allergies"
+        "Follow-up: Review after 5 days." -> "follow-up"
+    """
+
+    text = normalize_text(
+        text
+    ).lower()
+
+    if ":" in text:
+        text = text.split(
+            ":",
+            1,
+        )[0]
+
+    text = text.strip()
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text,
+    )
+
+    return text.rstrip(":")
+
+
+# ============================================================================
+# PATIENT
+# ============================================================================
+
+def extract_patient(
+    items: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+
+    patient = {
+        "name": None,
+        "patient_id": None,
+        "hospital_id": None,
+        "age": None,
+        "sex": None,
+    }
+
+    for item in items:
+
+        text = item["text"]
+
+        match = re.search(
+            r"Patient\s+Name\s*:\s*(.+)",
+            text,
+            re.IGNORECASE,
+        )
+
+        if match:
+            patient["name"] = normalize_text(
+                match.group(1)
+            )
+
+        match = re.search(
+            r"Patient\s+ID\s*:\s*(.+)",
+            text,
+            re.IGNORECASE,
+        )
+
+        if match:
+            patient["patient_id"] = normalize_text(
+                match.group(1)
+            )
+
+        match = re.search(
+            r"Hospital\s+ID\s*:\s*(.+)",
+            text,
+            re.IGNORECASE,
+        )
+
+        if match:
+            patient["hospital_id"] = normalize_text(
+                match.group(1)
+            )
+
+        match = re.search(
+            r"Age\s*/\s*Sex\s*:\s*"
+            r"(\d+)\s*(?:years?|yrs?)?\s*/\s*"
+            r"([A-Za-z]+)",
+            text,
+            re.IGNORECASE,
+        )
+
+        if match:
+            patient["age"] = int(
+                match.group(1)
+            )
+
+            patient["sex"] = normalize_text(
+                match.group(2)
+            )
+
+    return patient
+
+
+# ============================================================================
+# DIAGNOSIS
+# ============================================================================
+
+def extract_diagnoses(
+    items: List[Dict[str, Any]],
+) -> List[str]:
 
     diagnoses = []
 
-    diagnosis = data.get("diagnosis")
+    headers = {
+        "diagnosis",
+        "diagnoses",
+        "final diagnosis",
+        "impression",
+        "clinical impression",
+    }
 
-    # --------------------------------------------------------
-    # Diagnosis stored as string
-    # --------------------------------------------------------
+    stop_headers = {
+        "medications",
+        "medication",
+        "discharge medications",
+        "procedures",
+        "procedure",
+        "hospital course",
+        "discharge advice",
+        "follow-up",
+        "follow up",
+        "drug allergies",
+    }
 
-    if isinstance(diagnosis, str):
+    for index, item in enumerate(items):
 
-        if diagnosis.strip():
+        text = item["text"]
 
-            diagnoses.append({
-                "name": clean_text(diagnosis),
-                "type": "primary"
-            })
+        inline = re.match(
+            r"^(?:Diagnosis|Final Diagnosis|Impression|"
+            r"Clinical Impression)\s*:\s*(.+)$",
+            text,
+            re.IGNORECASE,
+        )
 
-    # --------------------------------------------------------
-    # Diagnosis stored as dictionary
-    # --------------------------------------------------------
+        if inline:
 
-    elif isinstance(diagnosis, dict):
+            diagnosis = normalize_text(
+                inline.group(1)
+            ).rstrip(".")
 
-        primary = diagnosis.get("primary")
+            if (
+                diagnosis
+                and diagnosis not in diagnoses
+            ):
+                diagnoses.append(
+                    diagnosis
+                )
 
-        if primary and str(primary).lower() != "none":
+            continue
 
-            diagnoses.append({
-                "name": clean_text(primary),
-                "type": "primary"
-            })
+        normalized = normalize_header(
+            text
+        )
 
-        secondary = diagnosis.get("secondary")
+        if normalized not in headers:
+            continue
 
-        # Secondary diagnoses stored as list
-        if isinstance(secondary, list):
+        header_y = item["y"]
 
-            for item in secondary:
+        for candidate in items[index + 1:]:
 
-                if item and str(item).lower() != "none":
+            if candidate["y"] <= header_y:
+                continue
 
-                    diagnoses.append({
-                        "name": clean_text(item),
-                        "type": "secondary"
-                    })
+            if (
+                candidate["y"] - header_y
+                > 100
+            ):
+                break
 
-        # Secondary diagnosis stored as string
-        elif secondary:
+            candidate_header = normalize_header(
+                candidate["text"]
+            )
 
-            if str(secondary).lower() != "none":
+            if candidate_header in headers:
+                continue
 
-                diagnoses.append({
-                    "name": clean_text(secondary),
-                    "type": "secondary"
-                })
+            if candidate_header in stop_headers:
+                break
+
+            diagnosis = normalize_text(
+                candidate["text"]
+            ).rstrip(".")
+
+            if (
+                diagnosis
+                and diagnosis not in diagnoses
+            ):
+                diagnoses.append(
+                    diagnosis
+                )
+
+            break
 
     return diagnoses
 
 
-# ============================================================
-# PROCEDURE EXTRACTION
-# ============================================================
+# ============================================================================
+# ROW GROUPING
+# ============================================================================
 
-def extract_procedures(data):
+def group_rows(
+    items: List[Dict[str, Any]],
+    tolerance: float = 14.0,
+) -> List[List[Dict[str, Any]]]:
+    """
+    Group OCR boxes into visual rows using their Y coordinates.
+    """
 
-    procedures = []
+    sorted_items = sorted(
+        items,
+        key=lambda item: (
+            item["y"],
+            item["x"],
+        ),
+    )
 
-    treatment = data.get("treatment", {})
+    rows: List[List[Dict[str, Any]]] = []
 
-    # --------------------------------------------------------
-    # Treatment stored as dictionary
-    # --------------------------------------------------------
+    for item in sorted_items:
 
-    if isinstance(treatment, dict):
-
-        procedure = treatment.get("procedure")
-
-        if procedure:
-
-            procedures.append({
-                "name": clean_text(procedure)
-            })
-
-    # --------------------------------------------------------
-    # Treatment stored as string
-    # --------------------------------------------------------
-
-    elif isinstance(treatment, str):
-
-        if treatment.strip():
-
-            procedures.append({
-                "name": clean_text(treatment)
-            })
-
-    return procedures
-
-
-# ============================================================
-# LAB EXTRACTION
-# ============================================================
-
-def extract_labs(data):
-
-    labs = []
-
-    source_labs = data.get("labs", [])
-
-    if not isinstance(source_labs, list):
-        return labs
-
-    for lab in source_labs:
-
-        if not isinstance(lab, dict):
-            continue
-
-        reference_range = (
-            lab.get("reference_range")
-            or lab.get("range")
+        center_y = (
+            item["y"]
+            + item["height"] / 2
         )
 
-        labs.append({
-            "name": clean_text(
-                lab.get("name")
-                or lab.get("test")
-                or lab.get("analyte")
-            ),
+        matched = False
 
-            "value": lab.get("value"),
+        for row in rows:
 
-            "unit": clean_text(
-                lab.get("unit")
-            ),
+            row_center = sum(
+                current["y"]
+                + current["height"] / 2
+                for current in row
+            ) / len(row)
 
-            "reference_range": reference_range,
+            if (
+                abs(
+                    center_y
+                    - row_center
+                )
+                <= tolerance
+            ):
+                row.append(item)
+                matched = True
+                break
 
-            "status": clean_text(
-                lab.get("status")
-            ),
+        if not matched:
+            rows.append([item])
 
-            "abnormal": lab.get(
-                "abnormal",
-                False
-            ),
+    for row in rows:
+        row.sort(
+            key=lambda item: item["x"]
+        )
 
-            "risk_flag": clean_text(
-                lab.get("risk_flag")
+    return rows
+
+
+# ============================================================================
+# MEDICATION HELPERS
+# ============================================================================
+
+def is_dosage(
+    text: str,
+) -> bool:
+
+    return bool(
+        DOSAGE_PATTERN.match(
+            normalize_text(text)
+        )
+    )
+
+
+def is_duration(
+    text: str,
+) -> bool:
+
+    return bool(
+        DURATION_PATTERN.match(
+            normalize_text(text)
+        )
+    )
+
+
+def is_route(
+    text: str,
+) -> bool:
+
+    return (
+        normalize_text(text).lower()
+        in ROUTE_VALUES
+    )
+
+
+def is_frequency(
+    text: str,
+) -> bool:
+
+    lowered = normalize_text(
+        text
+    ).lower()
+
+    return any(
+        pattern in lowered
+        for pattern in FREQUENCY_PATTERNS
+    )
+
+
+def looks_like_medication_name(
+    text: str,
+) -> bool:
+    """
+    Reject obvious non-medication content.
+
+    This is deliberately conservative so that prose such as:
+        Allergies: No known drug allergies
+        Advice: Adequate oral fluids...
+        Follow-up: Review after 5 days
+    is never treated as a medicine.
+    """
+
+    text = normalize_text(
+        text
+    )
+
+    if not text:
+        return False
+
+    lowered = text.lower()
+
+    # ------------------------------------------------------------------------
+    # Explicit exclusions
+    # ------------------------------------------------------------------------
+
+    excluded_exact = (
+        MEDICATION_TABLE_HEADERS
+        | MEDICATION_STOP_HEADERS
+        | {
+            "oral",
+            "intravenous",
+            "iv",
+            "normal",
+            "high",
+            "low",
+            "status",
+            "result",
+            "reference range",
+            "investigation",
+        }
+    )
+
+    if lowered in excluded_exact:
+        return False
+
+    # ------------------------------------------------------------------------
+    # Clinical prose / section labels
+    # ------------------------------------------------------------------------
+
+    clinical_prefixes = (
+        "allergies:",
+        "drug allergies:",
+        "advice:",
+        "discharge advice:",
+        "follow-up:",
+        "follow up:",
+        "red-flag advice:",
+        "red flag advice:",
+        "important:",
+        "laboratory comment:",
+        "doctor:",
+        "hospital:",
+    )
+
+    if lowered.startswith(
+        clinical_prefixes
+    ):
+        return False
+
+    # ------------------------------------------------------------------------
+    # Punctuation-heavy prose is unlikely to be a medicine name.
+    # ------------------------------------------------------------------------
+
+    if ":" in text:
+        return False
+
+    if text.endswith("."):
+        return False
+
+    # ------------------------------------------------------------------------
+    # Structured non-name values
+    # ------------------------------------------------------------------------
+
+    if is_dosage(text):
+        return False
+
+    if is_duration(text):
+        return False
+
+    if is_route(text):
+        return False
+
+    if is_frequency(text):
+        return False
+
+    if NUMERIC_PATTERN.match(text):
+        return False
+
+    if REFERENCE_RANGE_PATTERN.match(text):
+        return False
+
+    if UNIT_PATTERN.match(text):
+        return False
+
+    # ------------------------------------------------------------------------
+    # Sentence-like prose
+    # ------------------------------------------------------------------------
+
+    words = text.split()
+
+    if len(words) > 4:
+        return False
+
+    # Medication names can contain letters, digits, hyphens, etc.
+    return bool(
+        re.search(
+            r"[A-Za-z]",
+            text,
+        )
+    )
+
+
+# ============================================================================
+# SECTION FINDER
+# ============================================================================
+
+def find_section(
+    items: List[Dict[str, Any]],
+    start_headers: List[str],
+    end_headers: List[str],
+) -> List[Dict[str, Any]]:
+    """
+    Find a section using normalized header matching.
+
+    Handles both:
+        "Allergies"
+        "Allergies: No known drug allergies."
+
+    The latter is normalized to:
+        "allergies"
+    """
+
+    normalized_start = {
+        normalize_header(header)
+        for header in start_headers
+    }
+
+    normalized_end = {
+        normalize_header(header)
+        for header in end_headers
+    }
+
+    start_index = -1
+
+    for index, item in enumerate(items):
+
+        header = normalize_header(
+            item["text"]
+        )
+
+        if header in normalized_start:
+            start_index = index
+            break
+
+    if start_index == -1:
+        return []
+
+    end_index = len(items)
+
+    for index in range(
+        start_index + 1,
+        len(items),
+    ):
+
+        header = normalize_header(
+            items[index]["text"]
+        )
+
+        if header in normalized_end:
+            end_index = index
+            break
+
+    return items[
+        start_index:end_index
+    ]
+
+
+# ============================================================================
+# MEDICATION EXTRACTION
+# ============================================================================
+
+def extract_medications(
+    items: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Extract medication tables using OCR coordinates.
+
+    Supports layouts such as:
+
+        Medicine | Dosage | Route | Frequency | Duration
+
+    and:
+
+        Medication | Dose | Frequency | Duration
+    """
+
+    section = find_section(
+        items,
+        start_headers=[
+            "Medications",
+            "Discharge Medications",
+        ],
+        end_headers=[
+            "Allergies",
+            "Drug Allergies",
+            "Advice",
+            "Discharge Advice",
+            "Follow-up",
+            "Follow Up",
+            "Red-flag advice",
+            "Red Flag Advice",
+        ],
+    )
+
+    if not section:
+        return []
+
+    # ------------------------------------------------------------------------
+    # Locate table headers.
+    # ------------------------------------------------------------------------
+
+    headers: Dict[str, float] = {}
+
+    for item in section:
+
+        header = normalize_header(
+            item["text"]
+        )
+
+        if header in {
+            "medicine",
+            "medication",
+        }:
+            headers["name"] = item["x"]
+
+        elif header in {
+            "dosage",
+            "dose",
+        }:
+            headers["dosage"] = item["x"]
+
+        elif header == "route":
+            headers["route"] = item["x"]
+
+        elif header == "frequency":
+            headers["frequency"] = item["x"]
+
+        elif header == "duration":
+            headers["duration"] = item["x"]
+
+    if "name" not in headers:
+        return []
+
+    # ------------------------------------------------------------------------
+    # Find the table header Y coordinate.
+    # ------------------------------------------------------------------------
+
+    header_y = None
+
+    for item in section:
+
+        header = normalize_header(
+            item["text"]
+        )
+
+        if header in {
+            "medicine",
+            "medication",
+        }:
+            header_y = (
+                item["y"]
+                + item["height"] / 2
             )
-        })
+            break
 
-    return labs
+    if header_y is None:
+        return []
 
+    # ------------------------------------------------------------------------
+    # Only process items below the table header.
+    # ------------------------------------------------------------------------
 
-# ============================================================
-# DATE EXTRACTION
-# ============================================================
+    data = []
 
-def extract_dates(data):
+    for item in section:
 
-    dates = {}
+        item_center_y = (
+            item["y"]
+            + item["height"] / 2
+        )
 
-    # --------------------------------------------------------
-    # Actual discharge extractor structure
+        if item_center_y > header_y + 8:
+            data.append(item)
+
+    rows = group_rows(
+        data,
+        tolerance=16.0,
+    )
+
+    # ------------------------------------------------------------------------
+    # Build column boundaries from header positions.
     #
-    # patient_information:
-    #   admission_date
-    #   discharge_date
-    #   date_of_birth
-    # --------------------------------------------------------
+    # We use midpoint boundaries between adjacent headers instead of simply
+    # assigning every item to the nearest header. This prevents a long text
+    # item from jumping into a neighboring column.
+    # ------------------------------------------------------------------------
 
-    patient_information = data.get(
-        "patient_information",
-        {}
+    ordered_columns = sorted(
+        headers.items(),
+        key=lambda pair: pair[1],
     )
 
-    if isinstance(patient_information, dict):
+    boundaries = []
 
-        if patient_information.get("admission_date"):
+    for index, (
+        column_name,
+        x_position,
+    ) in enumerate(
+        ordered_columns
+    ):
 
-            dates["admission_date"] = clean_text(
-                patient_information.get(
-                    "admission_date"
-                )
+        if index == 0:
+            left = float("-inf")
+        else:
+            previous_x = ordered_columns[
+                index - 1
+            ][1]
+
+            left = (
+                previous_x
+                + x_position
+            ) / 2
+
+        if index == len(
+            ordered_columns
+        ) - 1:
+            right = float("inf")
+        else:
+            next_x = ordered_columns[
+                index + 1
+            ][1]
+
+            right = (
+                x_position
+                + next_x
+            ) / 2
+
+        boundaries.append(
+            (
+                column_name,
+                left,
+                right,
             )
-
-        if patient_information.get("discharge_date"):
-
-            dates["discharge_date"] = clean_text(
-                patient_information.get(
-                    "discharge_date"
-                )
-            )
-
-        if patient_information.get("date_of_birth"):
-
-            dates["date_of_birth"] = clean_text(
-                patient_information.get(
-                    "date_of_birth"
-                )
-            )
-
-    # --------------------------------------------------------
-    # Generic patient structure
-    # --------------------------------------------------------
-
-    patient = data.get(
-        "patient",
-        {}
-    )
-
-    if isinstance(patient, dict):
-
-        if patient.get("admission_date"):
-
-            dates["admission_date"] = clean_text(
-                patient.get(
-                    "admission_date"
-                )
-            )
-
-        if patient.get("discharge_date"):
-
-            dates["discharge_date"] = clean_text(
-                patient.get(
-                    "discharge_date"
-                )
-            )
-
-        if patient.get("date_of_birth"):
-
-            dates["date_of_birth"] = clean_text(
-                patient.get(
-                    "date_of_birth"
-                )
-            )
-
-    # --------------------------------------------------------
-    # Follow-up
-    # --------------------------------------------------------
-
-    follow_up = data.get(
-        "follow_up",
-        {}
-    )
-
-    if isinstance(follow_up, dict):
-
-        if follow_up.get("date"):
-
-            dates["follow_up_date"] = clean_text(
-                follow_up.get("date")
-            )
-
-        if follow_up.get("time"):
-
-            dates["follow_up_time"] = clean_text(
-                follow_up.get("time")
-            )
-
-    return dates
-
-
-# ============================================================
-# PATIENT EXTRACTION
-# ============================================================
-
-def extract_patient(data):
-
-    # --------------------------------------------------------
-    # Actual discharge extractor structure
-    # --------------------------------------------------------
-
-    patient = data.get(
-        "patient_information",
-        {}
-    )
-
-    # --------------------------------------------------------
-    # Fallback to generic patient structure
-    # --------------------------------------------------------
-
-    if not isinstance(patient, dict) or not patient:
-
-        patient = data.get(
-            "patient",
-            {}
         )
 
-    if not isinstance(patient, dict):
+    def get_column(
+        x: float,
+    ) -> Optional[str]:
 
-        return {}
+        for (
+            column_name,
+            left,
+            right,
+        ) in boundaries:
 
-    return {
-        "name": clean_text(
-            patient.get("name")
-        ),
+            if left <= x < right:
+                return column_name
 
-        "date_of_birth": clean_text(
-            patient.get("date_of_birth")
-        ),
+        return None
 
-        "hospital_id": clean_text(
-            patient.get("hospital_id")
-        )
-    }
+    medications = []
 
+    for row in rows:
 
-# ============================================================
-# DISCHARGE SUMMARY PROCESSING
-# ============================================================
+        cells: Dict[str, str] = {}
 
-def process_discharge(data):
+        for item in row:
 
-    result = {
+            column = get_column(
+                item["x"]
+            )
 
-        "source":
-            "discharge_extraction_result.json",
+            if column is None:
+                continue
 
-        "document_type":
-            "DISCHARGE_SUMMARY",
+            text = normalize_text(
+                item["text"]
+            )
 
-        "patient":
-            extract_patient(data),
+            if not text:
+                continue
 
-        "diagnoses":
-            extract_diagnoses(data),
+            if column in cells:
+                cells[column] = (
+                    cells[column]
+                    + " "
+                    + text
+                )
+            else:
+                cells[column] = text
 
-        "medications":
-            extract_medications(data),
-
-        "procedures":
-            extract_procedures(data),
-
-        "laboratory_results":
-            extract_labs(data),
-
-        "dates":
-            extract_dates(data)
-    }
-
-    return result
-
-
-# ============================================================
-# LAB REPORT PROCESSING
-# ============================================================
-
-def process_lab(data):
-
-    tests = []
-
-    # --------------------------------------------------------
-    # Lab extractor may return a list directly
-    # --------------------------------------------------------
-
-    if isinstance(data, list):
-
-        source_tests = data
-
-    else:
-
-        source_tests = data.get(
-            "tests",
-            []
+        name = clean_value(
+            cells.get("name")
         )
 
-    if not isinstance(source_tests, list):
-
-        source_tests = []
-
-    for test in source_tests:
-
-        if not isinstance(test, dict):
+        if not name:
             continue
 
-        reference_range = (
-            test.get("reference_range")
-            or test.get("range")
+        if not looks_like_medication_name(
+            name
+        ):
+            continue
+
+        medication = {
+            "name": name,
+            "dosage": clean_value(
+                cells.get("dosage")
+            ),
+            "route": clean_value(
+                cells.get("route")
+            ),
+            "frequency": clean_value(
+                cells.get("frequency")
+            ),
+            "duration": clean_value(
+                cells.get("duration")
+            ),
+        }
+
+        medications.append(
+            medication
         )
 
-        tests.append({
-
-            "name": clean_text(
-                test.get("name")
-                or test.get("test")
-                or test.get("analyte")
-            ),
-
-            "value": test.get(
-                "value"
-            ),
-
-            "unit": clean_text(
-                test.get("unit")
-            ),
-
-            "reference_range":
-                reference_range,
-
-            "status": clean_text(
-                test.get("status")
-            ),
-
-            "abnormal": test.get(
-                "abnormal",
-                False
-            ),
-
-            "risk_flag": clean_text(
-                test.get("risk_flag")
-            )
-        })
-
-    return {
-
-        "source":
-            "lab_extraction_result.json",
-
-        "document_type":
-            "LAB_REPORT",
-
-        "laboratory_results":
-            tests
-    }
+    return deduplicate_medications(
+        medications
+    )
 
 
-# ============================================================
-# REMOVE DUPLICATE MEDICATIONS
-# ============================================================
+def deduplicate_medications(
+    medications: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
 
-def remove_duplicate_medications(
-    medications
-):
-
-    unique_medications = []
-
+    output = []
     seen = set()
 
     for medication in medications:
 
-        name = medication.get(
-            "name"
+        name = normalize_text(
+            medication.get("name")
         )
 
         if not name:
             continue
 
-        key = str(name).lower().strip()
+        key = (
+            name.lower(),
+            normalize_text(
+                medication.get("dosage")
+            ).lower(),
+            normalize_text(
+                medication.get("frequency")
+            ).lower(),
+            normalize_text(
+                medication.get("duration")
+            ).lower(),
+        )
 
         if key in seen:
             continue
 
         seen.add(key)
-
-        unique_medications.append(
+        output.append(
             medication
         )
 
-    return unique_medications
+    return output
 
 
-# ============================================================
-# REMOVE DUPLICATE DIAGNOSES
-# ============================================================
+# ============================================================================
+# LAB HELPERS
+# ============================================================================
 
-def remove_duplicate_diagnoses(
-    diagnoses
-):
+def canonical_lab_name(
+    text: str,
+) -> Optional[str]:
 
-    unique_diagnoses = []
+    normalized = normalize_text(
+        text
+    ).lower()
 
-    seen = set()
-
-    for diagnosis in diagnoses:
-
-        name = diagnosis.get(
-            "name"
-        )
-
-        if not name:
-            continue
-
-        key = str(name).lower().strip()
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-
-        unique_diagnoses.append(
-            diagnosis
-        )
-
-    return unique_diagnoses
-
-
-# ============================================================
-# REMOVE DUPLICATE LAB RESULTS
-# ============================================================
-
-def remove_duplicate_labs(
-    labs
-):
-
-    unique_labs = []
-
-    seen = set()
-
-    for lab in labs:
-
-        name = lab.get(
-            "name"
-        )
-
-        value = lab.get(
-            "value"
-        )
-
-        key = (
-            str(name).lower().strip()
-            if name
-            else ""
-        )
-
-        key = (
-            key,
-            str(value)
-        )
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-
-        unique_labs.append(
-            lab
-        )
-
-    return unique_labs
-
-
-# ============================================================
-# MAIN
-# ============================================================
-
-def main():
-
-    print("=" * 60)
-    print(
-        "          CLINICAL ENTITY EXTRACTION"
-    )
-    print("=" * 60)
-
-    # --------------------------------------------------------
-    # Input files
-    # --------------------------------------------------------
-
-    discharge_file = (
-        BASE_DIR
-        / "discharge_extraction_result.json"
+    return LAB_ALIASES.get(
+        normalized
     )
 
-    lab_file = (
-        BASE_DIR
-        / "lab_extraction_result.json"
+
+def extract_reference_numbers(
+    reference_range: Optional[str],
+) -> Optional[tuple[float, float]]:
+
+    if not reference_range:
+        return None
+
+    match = re.match(
+        r"^\s*"
+        r"([0-9]+(?:\.[0-9]+)?)"
+        r"\s*-\s*"
+        r"([0-9]+(?:\.[0-9]+)?)"
+        r"\s*$",
+        reference_range,
     )
 
-    # --------------------------------------------------------
-    # Final unified structure
-    # --------------------------------------------------------
+    if not match:
+        return None
 
-    final_result = {
+    try:
+        return (
+            float(match.group(1)),
+            float(match.group(2)),
+        )
+    except ValueError:
+        return None
 
-        "module":
-            "Clinical Entity Extraction",
 
-        "status":
-            "SUCCESS",
+def infer_lab_status(
+    value: str,
+    reference_range: Optional[str],
+) -> Optional[str]:
 
-        "patient": {},
+    bounds = extract_reference_numbers(
+        reference_range
+    )
 
-        "diagnoses": [],
+    if bounds is None:
+        return None
 
-        "medications": [],
+    try:
+        numeric_value = float(
+            value.replace(",", "")
+        )
+    except (
+        ValueError,
+        TypeError,
+    ):
+        return None
 
-        "laboratory_results": [],
+    lower, upper = bounds
 
-        "procedures": [],
+    if numeric_value > upper:
+        return "high"
 
-        "dates": {},
+    if numeric_value < lower:
+        return "low"
 
-        "sources": []
-    }
+    return "normal"
 
-    # ========================================================
-    # DISCHARGE SUMMARY
-    # ========================================================
 
-    if discharge_file.exists():
+def extract_laboratory_results(
+    items: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Extract laboratory rows using OCR coordinates.
 
-        print(
-            "\nReading discharge extraction..."
+    IMPORTANT:
+    Lab names are on the LEFT side of the table.
+    Result/unit/reference/status are on the RIGHT.
+
+    Therefore candidates must NOT be restricted to:
+        item["x"] < lab_x
+
+    Instead, we examine the full horizontal row and classify the cells.
+    """
+
+    results = []
+
+    lab_items = []
+
+    for item in items:
+
+        lab_name = canonical_lab_name(
+            item["text"]
         )
 
-        discharge_data = load_json(
-            "discharge_extraction_result.json"
-        )
-
-        if discharge_data:
-
-            discharge_result = (
-                process_discharge(
-                    discharge_data
+        if lab_name:
+            lab_items.append(
+                (
+                    item,
+                    lab_name,
                 )
             )
 
-            final_result["sources"].append(
-                "discharge_extraction_result.json"
+    # ------------------------------------------------------------------------
+    # Process every recognized investigation.
+    # ------------------------------------------------------------------------
+
+    for lab_item, lab_name in lab_items:
+
+        center_y = (
+            lab_item["y"]
+            + lab_item["height"] / 2
+        )
+
+        lab_x = lab_item["x"]
+
+        candidates = []
+
+        for item in items:
+
+            if item is lab_item:
+                continue
+
+            item_center_y = (
+                item["y"]
+                + item["height"] / 2
             )
 
-            # Patient
-            if discharge_result.get(
-                "patient"
+            # Same visual row.
+            if abs(
+                item_center_y
+                - center_y
+            ) <= 24:
+
+                # IMPORTANT:
+                # Include the full row, not x < lab_x.
+                #
+                # We only exclude OCR items that are clearly to the LEFT
+                # of the investigation name. The actual result fields are
+                # expected to be at or to the RIGHT of the lab name.
+                if item["x"] >= lab_x:
+                    candidates.append(
+                        item
+                    )
+
+        candidates.sort(
+            key=lambda item: item["x"]
+        )
+
+        value = None
+        unit = None
+        reference_range = None
+        status = None
+
+        # --------------------------------------------------------------------
+        # Classify cells by content.
+        # --------------------------------------------------------------------
+
+        for item in candidates:
+
+            text = normalize_text(
+                item["text"]
+            )
+
+            lowered = text.lower()
+
+            if lowered in {
+                "high",
+                "low",
+                "normal",
+            }:
+                status = lowered
+                continue
+
+            if REFERENCE_RANGE_PATTERN.match(
+                text
+            ):
+                reference_range = text
+                continue
+
+            if UNIT_PATTERN.match(
+                text
+            ):
+                unit = text
+                continue
+
+            if NUMERIC_PATTERN.match(
+                text
             ):
 
-                final_result[
-                    "patient"
-                ] = discharge_result[
-                    "patient"
-                ]
+                if value is None:
+                    value = text
 
-            # Diagnoses
-            final_result[
-                "diagnoses"
-            ].extend(
-                discharge_result[
-                    "diagnoses"
-                ]
+        if value is None:
+            continue
+
+        if status is None:
+            status = infer_lab_status(
+                value,
+                reference_range,
             )
 
-            # Medications
-            final_result[
-                "medications"
-            ].extend(
-                discharge_result[
-                    "medications"
-                ]
-            )
+        abnormal = status in {
+            "high",
+            "low",
+        }
 
-            # Labs
-            final_result[
-                "laboratory_results"
-            ].extend(
-                discharge_result[
-                    "laboratory_results"
-                ]
-            )
-
-            # Procedures
-            final_result[
-                "procedures"
-            ].extend(
-                discharge_result[
-                    "procedures"
-                ]
-            )
-
-            # Dates
-            final_result[
-                "dates"
-            ].update(
-                discharge_result[
-                    "dates"
-                ]
-            )
-
-    else:
-
-        print(
-            "\nDischarge extraction file not found."
+        results.append(
+            {
+                "name": lab_name,
+                "value": value,
+                "unit": unit,
+                "reference_range": (
+                    reference_range
+                ),
+                "status": status,
+                "abnormal": abnormal,
+                "risk_flag": (
+                    "review_required"
+                    if abnormal
+                    else None
+                ),
+            }
         )
 
-    # ========================================================
-    # LAB REPORT
-    # ========================================================
-
-    if lab_file.exists():
-
-        print(
-            "Reading lab extraction..."
-        )
-
-        lab_data = load_json(
-            "lab_extraction_result.json"
-        )
-
-        if lab_data:
-
-            lab_result = process_lab(
-                lab_data
-            )
-
-            final_result[
-                "sources"
-            ].append(
-                "lab_extraction_result.json"
-            )
-
-            final_result[
-                "laboratory_results"
-            ].extend(
-                lab_result[
-                    "laboratory_results"
-                ]
-            )
-
-    else:
-
-        print(
-            "Lab extraction file not found."
-        )
-
-    # ========================================================
-    # REMOVE DUPLICATES
-    # ========================================================
-
-    final_result[
-        "medications"
-    ] = remove_duplicate_medications(
-        final_result[
-            "medications"
-        ]
-    )
-
-    final_result[
-        "diagnoses"
-    ] = remove_duplicate_diagnoses(
-        final_result[
-            "diagnoses"
-        ]
-    )
-
-    final_result[
-        "laboratory_results"
-    ] = remove_duplicate_labs(
-        final_result[
-            "laboratory_results"
-        ]
-    )
-
-    # ========================================================
-    # SAVE JSON
-    # ========================================================
-
-    output_file = (
-        BASE_DIR
-        / "clinical_entities.json"
-    )
-
-    with open(
-        output_file,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            final_result,
-            f,
-            indent=4,
-            ensure_ascii=False
-        )
-
-    # ========================================================
-    # DISPLAY RESULT
-    # ========================================================
-
-    print("\n" + "=" * 60)
-    print(
-        "        CLINICAL ENTITY EXTRACTION RESULT"
-    )
-    print("=" * 60)
-
-    # --------------------------------------------------------
-    # Patient
-    # --------------------------------------------------------
-
-    print("\nPatient:")
-
-    print(
-        json.dumps(
-            final_result["patient"],
-            indent=2,
-            ensure_ascii=False
-        )
-    )
-
-    # --------------------------------------------------------
-    # Diagnoses
-    # --------------------------------------------------------
-
-    print("\nDiagnoses:")
-
-    if final_result["diagnoses"]:
-
-        for item in final_result[
-            "diagnoses"
-        ]:
-
-            print(
-                " -",
-                item
-            )
-
-    else:
-
-        print(" - None")
-
-    # --------------------------------------------------------
-    # Medications
-    # --------------------------------------------------------
-
-    print("\nMedications:")
-
-    if final_result["medications"]:
-
-        for item in final_result[
-            "medications"
-        ]:
-
-            print(
-                " -",
-                item
-            )
-
-    else:
-
-        print(" - None")
-
-    # --------------------------------------------------------
-    # Laboratory results
-    # --------------------------------------------------------
-
-    print("\nLaboratory Results:")
-
-    if final_result[
-        "laboratory_results"
-    ]:
-
-        for item in final_result[
-            "laboratory_results"
-        ]:
-
-            print(
-                " -",
-                item
-            )
-
-    else:
-
-        print(" - None")
-
-    # --------------------------------------------------------
-    # Procedures
-    # --------------------------------------------------------
-
-    print("\nProcedures:")
-
-    if final_result["procedures"]:
-
-        for item in final_result[
-            "procedures"
-        ]:
-
-            print(
-                " -",
-                item
-            )
-
-    else:
-
-        print(" - None")
-
-    # --------------------------------------------------------
-    # Dates
-    # --------------------------------------------------------
-
-    print("\nDates:")
-
-    if final_result["dates"]:
-
-        for key, value in final_result[
-            "dates"
-        ].items():
-
-            print(
-                f" - {key}: {value}"
-            )
-
-    else:
-
-        print(" - None")
-
-    # --------------------------------------------------------
-    # Sources
-    # --------------------------------------------------------
-
-    print("\nSources:")
-
-    for source in final_result[
-        "sources"
-    ]:
-
-        print(
-            f" - {source}"
-        )
-
-    # ========================================================
-    # STATUS
-    # ========================================================
-
-    print("\n" + "=" * 60)
-    print("STATUS: SUCCESS")
-    print("=" * 60)
-
-    print(
-        f"\nJSON saved to: {output_file.name}"
+    return deduplicate_labs(
+        results
     )
 
 
-# ============================================================
-# ENTRY POINT
-# ============================================================
+def deduplicate_labs(
+    results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
 
-if __name__ == "__main__":
+    output = []
+    seen = set()
 
-    main()
+    for result in results:
 
+        key = (
+            normalize_text(
+                result.get("name")
+            ).lower(),
+            normalize_text(
+                result.get("value")
+            ),
+        )
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        output.append(
+            result
+        )
+
+    return output
+
+
+# ============================================================================
+# PROCEDURES
+# ============================================================================
+
+def extract_procedures(
+    items: List[Dict[str, Any]],
+) -> List[str]:
+
+    procedures = []
+
+    for index, item in enumerate(items):
+
+        header = normalize_header(
+            item["text"]
+        )
+
+        if header not in {
+            "procedure",
+            "procedures",
+        }:
+            continue
+
+        header_y = item["y"]
+
+        for candidate in items[index + 1:]:
+
+            if candidate["y"] <= header_y:
+                continue
+
+            if (
+                candidate["y"] - header_y
+                > 100
+            ):
+                break
+
+            candidate_header = normalize_header(
+                candidate["text"]
+            )
+
+            if candidate_header in {
+                "discharge medications",
+                "drug allergies",
+                "discharge advice",
+                "follow-up",
+                "follow up",
+            }:
+                break
+
+            procedure = normalize_text(
+                candidate["text"]
+            ).rstrip(".")
+
+            if procedure:
+                procedures.append(
+                    procedure
+                )
+
+            break
+
+    return list(
+        dict.fromkeys(
+            procedures
+        )
+    )
+
+
+# ============================================================================
+# DATES
+# ============================================================================
+
+def extract_dates(
+    items: List[Dict[str, Any]],
+) -> List[Dict[str, str]]:
+
+    dates = []
+
+    for item in items:
+
+        text = item["text"]
+
+        matches = DATE_PATTERN.findall(
+            text
+        )
+
+        for date in matches:
+
+            lowered = text.lower()
+
+            if "sample date" in lowered:
+                date_type = "sample_date"
+
+            elif "report date" in lowered:
+                date_type = "report_date"
+
+            elif "admission date" in lowered:
+                date_type = "admission_date"
+
+            elif "discharge date" in lowered:
+                date_type = "discharge_date"
+
+            else:
+                date_type = "date"
+
+            entry = {
+                "date": normalize_text(
+                    date
+                ),
+                "type": date_type,
+            }
+
+            if entry not in dates:
+                dates.append(
+                    entry
+                )
+
+    return dates
+
+
+# ============================================================================
+# MAIN PUBLIC FUNCTION
+# ============================================================================
+
+def extract_clinical_entities(
+    ocr_results: Any,
+    document_type: str = "unknown",
+) -> Dict[str, Any]:
+    """
+    Extract clinical entities from REAL OCR results.
+
+    Preferred input:
+        page["ocr_text"]
+
+    Parameters
+    ----------
+    ocr_results:
+        Structured OCR items containing text and coordinates.
+
+    document_type:
+        Output of document_classifier.py.
+    """
+
+    items = normalize_ocr_results(
+        ocr_results
+    )
+
+    patient = extract_patient(
+        items
+    )
+
+    diagnoses = extract_diagnoses(
+        items
+    )
+
+    medications = extract_medications(
+        items
+    )
+
+    laboratory_results = (
+        extract_laboratory_results(
+            items
+        )
+    )
+
+    procedures = extract_procedures(
+        items
+    )
+
+    dates = extract_dates(
+        items
+    )
+
+    return {
+        "document_type": document_type,
+        "patient": patient,
+        "diagnoses": diagnoses,
+        "medications": medications,
+        "laboratory_results": laboratory_results,
+        "procedures": procedures,
+        "dates": dates,
+        "source": {
+            "ocr_line_count": len(items),
+        },
+    }

@@ -26,3 +26,16 @@ Thumbs.db
 
 # Frontend build output
 frontend/dist/
+
+# OCR runtime/generated files
+prepared/
+processed/
+backend/prepared/
+backend/processed/
+
+# Local OCR test documents
+test_documents/
+
+# Python cache
+__pycache__/
+*.pyc

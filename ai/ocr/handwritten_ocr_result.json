@@ -1,9 +1,0 @@
-{
-    "module": "Handwritten OCR",
-    "document_type": "HANDWRITTEN_DOCUMENT",
-    "source_image": "C:\\Users\\Lenovo\\Desktop\\medikiosk\\ai\\ocr\\test_images\\handwritten.png",
-    "ocr_engine": "TrOCR",
-    "model": "microsoft/trocr-base-handwritten",
-    "text": "0 0000",
-    "status": "SUCCESS"
-}
