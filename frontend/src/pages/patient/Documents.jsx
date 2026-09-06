@@ -50,7 +50,6 @@ export default function Documents() {
   const [isUploading, setIsUploading] =
     useState(false);
 
-
   /*
    * =========================
    * Add file locally
@@ -72,7 +71,6 @@ export default function Documents() {
     setError("");
   }
 
-
   /*
    * =========================
    * Remove local file
@@ -87,7 +85,6 @@ export default function Documents() {
       )
     );
   }
-
 
   /*
    * =========================
@@ -147,15 +144,16 @@ export default function Documents() {
       uploadedDocuments.push(response);
 
       /*
-       * Keep backend document information
-       * inside kiosk state.
+       * Store the backend document.
+       *
+       * Processing.jsx will use these
+       * backend IDs to start OCR processing.
        */
       addDocument(response);
     }
 
     return uploadedDocuments;
   }
-
 
   /*
    * =========================
@@ -167,7 +165,10 @@ export default function Documents() {
     setError("");
 
     /*
-     * No documents → simply continue.
+     * No documents → continue normally.
+     *
+     * Processing page can later be extended
+     * for AI summary generation.
      */
     if (documents.length === 0) {
       navigate("/processing");
@@ -180,7 +181,6 @@ export default function Documents() {
       await uploadDocuments();
 
       navigate("/processing");
-
     } catch (err) {
       console.error(
         "Failed to upload documents:",
@@ -199,7 +199,6 @@ export default function Documents() {
     }
   }
 
-
   /*
    * =========================
    * Skip
@@ -212,7 +211,6 @@ export default function Documents() {
     navigate("/processing");
   }
 
-
   /*
    * =========================
    * Back
@@ -224,7 +222,6 @@ export default function Documents() {
 
     navigate("/interview");
   }
-
 
   return (
     <main className="documents">
@@ -250,7 +247,6 @@ export default function Documents() {
           </button>
 
         </header>
-
 
         {/* =========================
             INTRO
@@ -281,7 +277,6 @@ export default function Documents() {
 
         </div>
 
-
         {/* =========================
             DOCUMENT CARD
             ========================= */}
@@ -294,7 +289,6 @@ export default function Documents() {
               "documents.documentType"
             )}
           </h2>
-
 
           {/* DOCUMENT TYPES */}
 
@@ -334,13 +328,11 @@ export default function Documents() {
 
           </div>
 
-
           {/* UPLOADER */}
 
           <DocumentUploader
             onFileAdd={handleFileAdd}
           />
-
 
           {/* SELECTED DOCUMENTS */}
 
@@ -403,7 +395,6 @@ export default function Documents() {
 
           )}
 
-
           {/* ERROR */}
 
           {error && (
@@ -411,7 +402,6 @@ export default function Documents() {
               {error}
             </p>
           )}
-
 
           {/* ACTIONS */}
 
@@ -428,7 +418,6 @@ export default function Documents() {
                 "documents.skip"
               )}
             </button>
-
 
             <button
               type="button"

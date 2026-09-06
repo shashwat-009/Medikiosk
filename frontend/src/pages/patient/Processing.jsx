@@ -1,8 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useKiosk } from "../../context/KioskContext";
 import { translate } from "../../i18n";
+
+import { documentService } from "../../services/documentService";
 
 import "./Processing.css";
 
@@ -13,13 +15,92 @@ export default function Processing() {
 
   const language = state.language || "en";
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      navigate("/confirmation");
-    }, 2500);
+  const [error, setError] = useState("");
 
-    return () => clearTimeout(timer);
-  }, [navigate]);
+  /*
+   * Prevent duplicate processing requests.
+   *
+   * React StrictMode can run an effect twice
+   * during development. Without this guard,
+   * the same document can receive two
+   * processing requests and the backend
+   * correctly returns 409 for the second one.
+   */
+  const processingStarted = useRef(false);
+
+  useEffect(() => {
+    if (processingStarted.current) {
+      return;
+    }
+
+    processingStarted.current = true;
+
+    async function processDocuments() {
+      const documents = state.documents || [];
+
+      /*
+       * No documents.
+       *
+       * Later this same Processing page can
+       * continue into AI summary generation.
+       */
+      if (documents.length === 0) {
+        navigate("/confirmation");
+        return;
+      }
+
+      try {
+        /*
+         * Process every uploaded document.
+         *
+         * The backend performs:
+         *
+         * upload
+         *   ↓
+         * OCR
+         *   ↓
+         * classification
+         *   ↓
+         * clinical extraction
+         */
+        for (const document of documents) {
+          if (!document?.id) {
+            throw new Error(
+              "Uploaded document ID is missing."
+            );
+          }
+
+          await documentService.process(
+            document.id
+          );
+        }
+
+        /*
+         * All documents completed successfully.
+         */
+        navigate("/confirmation");
+      } catch (err) {
+        console.error(
+          "Document processing failed:",
+          err
+        );
+
+        setError(
+          err.message ||
+            translate(
+              language,
+              "common.error"
+            )
+        );
+      }
+    }
+
+    processDocuments();
+  }, [
+    navigate,
+    state.documents,
+    language,
+  ]);
 
   return (
     <main className="processing">
@@ -93,6 +174,14 @@ export default function Processing() {
             </div>
 
           </div>
+
+          {/* Processing error */}
+
+          {error && (
+            <p className="processing__error">
+              {error}
+            </p>
+          )}
 
           {/* Privacy / instruction */}
 

@@ -6,4 +6,9 @@ export const documentService = {
       method: "POST",
       body: data,
     }),
+
+  process: (documentId) =>
+    api(`/documents/${documentId}/process`, {
+      method: "POST",
+    }),
 };
