@@ -5,6 +5,7 @@ import { useKiosk } from "../../context/KioskContext";
 import { translate } from "../../i18n";
 
 import { documentService } from "../../services/documentService";
+import { api } from "../../services/api";
 
 import "./Processing.css";
 
@@ -21,72 +22,185 @@ export default function Processing() {
    * Prevent duplicate processing requests.
    *
    * React StrictMode can run an effect twice
-   * during development. Without this guard,
-   * the same document can receive two
-   * processing requests and the backend
-   * correctly returns 409 for the second one.
+   * during development.
    */
   const processingStarted = useRef(false);
 
   useEffect(() => {
     if (processingStarted.current) {
+      console.log(
+        "PROCESSING: effect skipped - already started"
+      );
       return;
     }
 
     processingStarted.current = true;
 
-    async function processDocuments() {
-      const documents = state.documents || [];
+    console.log(
+      "================================================"
+    );
+    console.log(
+      "PROCESSING: effect started"
+    );
+    console.log(
+      "================================================"
+    );
 
-      /*
-       * No documents.
-       *
-       * Later this same Processing page can
-       * continue into AI summary generation.
-       */
-      if (documents.length === 0) {
-        navigate("/confirmation");
-        return;
-      }
+    async function processSession() {
+      const documents = state.documents || [];
+      const sessionId = state.session?.id;
+
+      console.log(
+        "PROCESSING: sessionId =",
+        sessionId
+      );
+
+      console.log(
+        "PROCESSING: documents =",
+        documents
+      );
 
       try {
         /*
-         * Process every uploaded document.
-         *
-         * The backend performs:
-         *
-         * upload
-         *   ↓
-         * OCR
-         *   ↓
-         * classification
-         *   ↓
-         * clinical extraction
+         * ============================================
+         * SESSION CHECK
+         * ============================================
          */
+
+        if (!sessionId) {
+          console.error(
+            "PROCESSING: SESSION ID MISSING"
+          );
+
+          throw new Error(
+            "Session ID is missing."
+          );
+        }
+
+        /*
+         * ============================================
+         * STEP 1: OCR DOCUMENTS
+         * ============================================
+         */
+
+        console.log(
+          "PROCESSING: starting document processing"
+        );
+
         for (const document of documents) {
+          console.log(
+            "PROCESSING: document found =",
+            document
+          );
+
           if (!document?.id) {
+            console.error(
+              "PROCESSING: DOCUMENT ID MISSING",
+              document
+            );
+
             throw new Error(
               "Uploaded document ID is missing."
             );
           }
 
-          await documentService.process(
+          console.log(
+            "PROCESSING: starting OCR for document =",
             document.id
+          );
+
+          const ocrResult =
+            await documentService.process(
+              document.id
+            );
+
+          console.log(
+            "PROCESSING: OCR finished successfully =",
+            document.id
+          );
+
+          console.log(
+            "PROCESSING: OCR response =",
+            ocrResult
           );
         }
 
         /*
-         * All documents completed successfully.
+         * ============================================
+         * STEP 2: SUMMARY
+         * ============================================
          */
+
+        console.log(
+          "================================================"
+        );
+
+        console.log(
+          "PROCESSING: ALL OCR COMPLETE"
+        );
+
+        console.log(
+          "PROCESSING: starting summary generation"
+        );
+
+        console.log(
+          "PROCESSING: summary URL =",
+          `/summaries/session/${sessionId}/generate`
+        );
+
+        const summaryResult = await api(
+          `/summaries/session/${sessionId}/generate`,
+          {
+            method: "POST",
+          }
+        );
+
+        console.log(
+          "PROCESSING: SUMMARY GENERATED SUCCESSFULLY"
+        );
+
+        console.log(
+          "PROCESSING: summary response =",
+          summaryResult
+        );
+
+        /*
+         * ============================================
+         * STEP 3: CONFIRMATION
+         * ============================================
+         */
+
+        console.log(
+          "PROCESSING: navigating to confirmation"
+        );
+
         navigate("/confirmation");
+
       } catch (err) {
         console.error(
-          "Document processing failed:",
+          "================================================"
+        );
+
+        console.error(
+          "PROCESSING: FAILED"
+        );
+
+        console.error(
+          "PROCESSING: error =",
           err
         );
 
+        console.error(
+          "PROCESSING: error message =",
+          err?.message
+        );
+
+        console.error(
+          "================================================"
+        );
+
         setError(
-          err.message ||
+          err?.message ||
             translate(
               language,
               "common.error"
@@ -95,10 +209,12 @@ export default function Processing() {
       }
     }
 
-    processDocuments();
+    processSession();
+
   }, [
     navigate,
     state.documents,
+    state.session,
     language,
   ]);
 
