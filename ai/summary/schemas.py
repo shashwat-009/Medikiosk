@@ -52,6 +52,7 @@ class NormalizedConversation(BaseModel):
     chief_complaints: List[NormalizedItem] = Field(default_factory=list)
     symptoms: List[NormalizedItem] = Field(default_factory=list)
     history: List[NormalizedItem] = Field(default_factory=list)
+    history_of_present_illness: List[NormalizedItem] = Field(default_factory=list)
     medical_history: List[NormalizedItem] = Field(default_factory=list)
     medications: List[NormalizedItem] = Field(default_factory=list)
     allergies: List[NormalizedItem] = Field(default_factory=list)
@@ -168,7 +169,7 @@ def normalize_conversation(data: Any) -> NormalizedConversation:
         "chief_complaint": "chief_complaints",
         "symptoms": "symptoms",
         "history": "history",
-        "history_of_present_illness": "history",
+        "history_of_present_illness": "history_of_present_illness",
         "medical_history": "medical_history",
         "medications": "medications",
         "medication_history": "medications",

@@ -36,12 +36,26 @@ def _build_conversation_data(
     Convert stored interview responses into the generic conversation
     structure expected by the summary adapter.
 
-    We intentionally preserve the original question/answer pairs
-    instead of trying to infer medical meaning here.
+    The original question/answer pairs are always preserved in
+    `history`.
+
+    Responses are additionally routed into their appropriate
+    clinical categories so the deterministic merger can build
+    separate summary sections.
+
+    No medical meaning is inferred from the answer.
     """
 
     conversation: dict[str, Any] = {
         "history": [],
+        "history_of_present_illness": [],
+        "chief_complaints": [],
+        "symptoms": [],
+        "medical_history": [],
+        "medications": [],
+        "allergies": [],
+        "investigations": [],
+        "relevant_negatives": [],
     }
 
     for response in responses:
@@ -51,14 +65,194 @@ def _build_conversation_data(
         if not answer:
             continue
 
-        conversation["history"].append(
-            {
-                "question": question,
-                "answer": answer,
-                "input_type": response.input_type,
-                "language": response.language,
-            }
+        item = {
+            "question": question,
+            "answer": answer,
+            "input_type": response.input_type,
+            "language": response.language,
+        }
+
+        # ----------------------------------------------------
+        # Always preserve the original interview history.
+        # ----------------------------------------------------
+
+        conversation["history"].append(item)
+
+        question_lower = question.lower()
+
+        # ----------------------------------------------------
+        # Chief Complaint
+        # ----------------------------------------------------
+
+        if question_lower == "chief complaint":
+            conversation["chief_complaints"].append(item)
+            continue
+
+        # ----------------------------------------------------
+        # HPI
+        #
+        # Only questions explicitly related to the current
+        # presenting illness belong here.
+        #
+        # The shared opening question is also treated as HPI,
+        # but NOT as a second chief complaint.
+        # ----------------------------------------------------
+
+        is_hpi = (
+            "current symptoms" in question_lower
+            or "present symptoms" in question_lower
+            or "how long" in question_lower
+            or "since when" in question_lower
+            or "duration" in question_lower
+            or "associated symptoms" in question_lower
+            or "other symptoms" in question_lower
+            or "worsen" in question_lower
+            or "improve" in question_lower
+            or "severity" in question_lower
+            or "how severe" in question_lower
+            or "pain" in question_lower
+            or "symptom" in question_lower
+            or "problem" in question_lower
+            or "health problem today" in question_lower
+            or "समस्या" in question
+            or "लक्षण" in question
+            or "कितने समय से" in question
+            or "कब से" in question
         )
+
+        if is_hpi:
+            conversation["history_of_present_illness"].append(
+                item
+            )
+            continue
+
+        # ----------------------------------------------------
+        # Standard history fields
+        # ----------------------------------------------------
+
+        if (
+            "allergy" in question_lower
+            or "allergies" in question_lower
+            or "एलर्जी" in question
+        ):
+            conversation["allergies"].append(item)
+            continue
+
+        if (
+            "medication history" in question_lower
+            or "drug history" in question_lower
+            or "currently taking" in question_lower
+            or "taking any medication" in question_lower
+            or "taking any medicines" in question_lower
+        ):
+            conversation["medications"].append(item)
+            continue
+
+        if (
+            "investigation" in question_lower
+            or "investigations" in question_lower
+            or "previous test" in question_lower
+            or "previous tests" in question_lower
+        ):
+            conversation["investigations"].append(item)
+            continue
+
+        # ----------------------------------------------------
+        # AYUSH assessment
+        #
+        # Add AYUSH fields as top-level unknown fields.
+        # The existing normalize_conversation() places these
+        # under `other`.
+        # ----------------------------------------------------
+
+        ayush_field = None
+
+        if "prakriti" in question_lower:
+            ayush_field = "Prakriti"
+
+        elif "vikriti" in question_lower:
+            ayush_field = "Vikriti"
+
+        elif "sara" in question_lower:
+            ayush_field = "Sara"
+
+        elif "samhanana" in question_lower:
+            ayush_field = "Samhanana"
+
+        elif "pramana" in question_lower:
+            ayush_field = "Pramana"
+
+        elif "satmya" in question_lower:
+            ayush_field = "Satmya"
+
+        elif "sattva" in question_lower:
+            ayush_field = "Sattva"
+
+        elif "ahara shakti" in question_lower:
+            ayush_field = "Ahara Shakti"
+
+        elif "vyayama shakti" in question_lower:
+            ayush_field = "Vyayama Shakti"
+
+        elif "age or vaya" in question_lower:
+            ayush_field = "Vaya"
+
+        elif "usual food and eating pattern" in question_lower:
+            ayush_field = "Ahara - Food Pattern"
+
+        elif "timing and regularity of meals" in question_lower:
+            ayush_field = "Ahara - Meal Timing"
+
+        elif "usual appetite" in question_lower:
+            ayush_field = "Ahara - Appetite"
+
+        elif (
+            "foods that the person does not tolerate"
+            in question_lower
+        ):
+            ayush_field = "Ahara - Food Tolerance"
+
+        elif (
+            "dietary preferences" in question_lower
+            or "dietary restrictions" in question_lower
+        ):
+            ayush_field = "Ahara - Dietary Preferences"
+
+        elif "sleep pattern" in question_lower:
+            ayush_field = "Vihara - Sleep"
+
+        elif "daily physical activity" in question_lower:
+            ayush_field = "Vihara - Physical Activity"
+
+        elif (
+            "exercise or physical activity routine"
+            in question_lower
+        ):
+            ayush_field = "Vihara - Exercise"
+
+        elif "usual daily routine" in question_lower:
+            ayush_field = "Vihara - Daily Routine"
+
+        elif (
+            "stress, workload" in question_lower
+            or "routine-related factors" in question_lower
+        ):
+            ayush_field = "Vihara - Stress / Workload"
+
+        if ayush_field:
+            conversation.setdefault(
+                ayush_field,
+                [],
+            ).append(
+                {
+                    "field": ayush_field,
+                    "question": question,
+                    "answer": answer,
+                    "input_type": response.input_type,
+                    "language": response.language,
+                }
+            )
+            continue
 
     return conversation
 

@@ -1,0 +1,2522 @@
+/* ============================================================
+   MEDIKIOSK DOCTOR PORTAL
+   Shared styles:
+   Login
+   Dashboard
+   Session Review
+   ============================================================ */
+
+
+:root {
+  --mk-primary: #0f766e;
+  --mk-primary-dark: #115e59;
+  --mk-primary-light: #ccfbf1;
+
+  --mk-bg: #f4f8f8;
+  --mk-surface: #ffffff;
+  --mk-surface-soft: #f8fbfb;
+
+  --mk-text: #102a2a;
+  --mk-text-secondary: #527070;
+  --mk-text-muted: #789090;
+
+  --mk-border: #dce8e7;
+  --mk-border-dark: #c8d9d8;
+
+  --mk-success: #15803d;
+  --mk-success-bg: #dcfce7;
+
+  --mk-warning: #b45309;
+  --mk-warning-bg: #fef3c7;
+
+  --mk-danger: #b91c1c;
+  --mk-danger-bg: #fee2e2;
+
+  --mk-shadow-sm:
+    0 2px 8px rgba(15, 55, 55, 0.05);
+
+  --mk-shadow:
+    0 8px 24px rgba(15, 55, 55, 0.07);
+
+  --mk-radius: 14px;
+}
+
+
+/* ============================================================
+   BASE
+   ============================================================ */
+
+.doctor-page,
+.doctor-login-page {
+  min-height: 100vh;
+
+  margin: 0;
+
+  color: var(--mk-text);
+
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Arial,
+    sans-serif;
+
+  box-sizing: border-box;
+}
+
+
+.doctor-page *,
+.doctor-login-page * {
+  box-sizing: border-box;
+}
+
+
+/* ============================================================
+   LOGIN PAGE
+   ============================================================ */
+
+.doctor-login-page {
+  background:
+    radial-gradient(
+      circle at 15% 20%,
+      rgba(20, 184, 166, 0.14),
+      transparent 32%
+    ),
+    var(--mk-bg);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  padding: 30px;
+}
+
+
+/* Main login container */
+
+.doctor-login-shell {
+  width: min(980px, 100%);
+
+  min-height: 590px;
+
+  display: grid;
+
+  grid-template-columns:
+    1fr 1fr;
+
+  background: white;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 20px;
+
+  overflow: hidden;
+
+  box-shadow:
+    0 25px 70px rgba(15, 55, 55, 0.12);
+}
+
+
+/* ============================================================
+   LEFT BRAND PANEL
+   LIGHT VERSION
+   ============================================================ */
+
+.doctor-login-brand {
+  padding: 50px 55px;
+
+  background:
+    linear-gradient(
+      145deg,
+      #edf9f7 0%,
+      #dff3f0 100%
+    );
+
+  color: var(--mk-text);
+
+  display: flex;
+
+  flex-direction: column;
+
+  justify-content: center;
+}
+
+
+/* ============================================================
+   LOGO
+   ============================================================ */
+
+.doctor-login-logo {
+  width: 82px;
+
+  height: 82px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: flex-start;
+
+  margin-bottom: 10px;
+
+  background: transparent;
+
+  border: none;
+
+  border-radius: 0;
+
+  overflow: visible;
+}
+
+
+.doctor-login-logo img {
+  width: 78px;
+
+  height: 78px;
+
+  object-fit: contain;
+
+  object-position: center;
+
+  display: block;
+
+  background: transparent;
+}
+
+
+/* ============================================================
+   BRAND NAME
+   ============================================================ */
+
+.doctor-brand-name {
+  color: var(--mk-primary-dark);
+
+  font-size: 17px;
+
+  font-weight: 800;
+
+  letter-spacing: 0.1px;
+}
+
+
+/* Decorative line */
+
+.doctor-brand-line {
+  width: 45px;
+
+  height: 2px;
+
+  background: var(--mk-primary);
+
+  margin: 27px 0;
+}
+
+
+/* Main heading */
+
+.doctor-login-brand h1 {
+  margin: 0;
+
+  color: var(--mk-text);
+
+  font-size: 39px;
+
+  line-height: 1.1;
+
+  letter-spacing: -1.2px;
+}
+
+
+/* Description */
+
+.doctor-login-brand > p {
+  max-width: 350px;
+
+  margin: 20px 0 0;
+
+  color: var(--mk-text-secondary);
+
+  font-size: 14px;
+
+  line-height: 1.7;
+}
+
+
+/* Bottom label */
+
+.doctor-brand-note {
+  margin-top: 45px;
+
+  color: var(--mk-primary-dark);
+
+  font-size: 11px;
+
+  text-transform: uppercase;
+
+  letter-spacing: 1.2px;
+
+  font-weight: 700;
+}
+
+
+/* ============================================================
+   RIGHT LOGIN PANEL
+   TEAL VERSION
+   ============================================================ */
+
+.doctor-login-card {
+  padding: 55px;
+
+  background:
+    linear-gradient(
+      145deg,
+      #0f766e 0%,
+      #115e59 100%
+    );
+
+  color: white;
+
+  display: flex;
+
+  flex-direction: column;
+
+  justify-content: center;
+}
+
+
+/* ============================================================
+   LOGIN HEADING
+   ============================================================ */
+
+.doctor-login-heading {
+  margin-bottom: 35px;
+}
+
+
+.doctor-login-eyebrow {
+  display: block;
+
+  margin-bottom: 9px;
+
+  color: #99f6e4;
+
+  font-size: 10px;
+
+  font-weight: 800;
+
+  letter-spacing: 1.2px;
+}
+
+
+.doctor-login-heading h2 {
+  margin: 0;
+
+  color: white;
+
+  font-size: 28px;
+
+  letter-spacing: -0.6px;
+}
+
+
+.doctor-login-heading p {
+  margin: 8px 0 0;
+
+  color: rgba(255, 255, 255, 0.78);
+
+  font-size: 13px;
+
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   LOGIN FORM
+   ============================================================ */
+
+.doctor-login-form {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 18px;
+}
+
+
+.doctor-field {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 7px;
+}
+
+
+.doctor-field label {
+  color: white;
+
+  font-size: 12px;
+
+  font-weight: 700;
+}
+
+
+.doctor-field input {
+  width: 100%;
+
+  height: 48px;
+
+  padding: 0 14px;
+
+  border: 1px solid rgba(255, 255, 255, 0.35);
+
+  border-radius: 9px;
+
+  background: rgba(255, 255, 255, 0.96);
+
+  color: var(--mk-text);
+
+  font-family: inherit;
+
+  font-size: 13px;
+
+  outline: none;
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+
+.doctor-field input:focus {
+  border-color: white;
+
+  background: white;
+
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+
+
+.doctor-field input::placeholder {
+  color: #8aa0a0;
+}
+
+
+/* ============================================================
+   FORM ERROR
+   ============================================================ */
+
+.doctor-form-error {
+  padding: 11px 13px;
+
+  border-radius: 8px;
+
+  background: var(--mk-danger-bg);
+
+  border: 1px solid #fecaca;
+
+  color: var(--mk-danger);
+
+  font-size: 12px;
+
+  font-weight: 600;
+}
+
+
+/* ============================================================
+   LOGIN BUTTON
+   ============================================================ */
+
+.doctor-login-button {
+  width: 100%;
+
+  height: 48px;
+
+  margin-top: 4px;
+
+  border: none;
+
+  border-radius: 9px;
+
+  background: white;
+
+  color: var(--mk-primary-dark);
+
+  font-family: inherit;
+
+  font-size: 13px;
+
+  font-weight: 800;
+
+  cursor: pointer;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  gap: 10px;
+
+  transition:
+    background 0.2s ease,
+    transform 0.15s ease,
+    box-shadow 0.2s ease;
+}
+
+
+.doctor-login-button:hover {
+  background: #f0fdfa;
+
+  transform: translateY(-1px);
+
+  box-shadow:
+    0 5px 15px rgba(0, 0, 0, 0.12);
+}
+
+
+.doctor-login-button span {
+  font-size: 17px;
+}
+
+
+/* ============================================================
+   LOGIN FOOTER
+   ============================================================ */
+
+.doctor-login-footer {
+  margin-top: 40px;
+
+  padding-top: 18px;
+
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+
+  color: rgba(255, 255, 255, 0.65);
+
+  font-size: 10px;
+
+  text-align: center;
+}
+
+
+/* ============================================================
+   TOP BAR
+   ============================================================ */
+
+.doctor-topbar {
+  min-height: 72px;
+
+  width: 100%;
+
+  background: white;
+
+  border-bottom: 1px solid var(--mk-border);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  padding: 0 34px;
+
+  position: sticky;
+
+  top: 0;
+
+  z-index: 100;
+
+  box-shadow: var(--mk-shadow-sm);
+}
+
+
+.doctor-topbar__brand {
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+}
+
+
+.doctor-brand-mini {
+  width: 42px;
+  height: 42px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  background: transparent;
+
+  border: none;
+
+  border-radius: 0;
+
+  overflow: visible;
+}
+
+
+.doctor-brand-mini img {
+  width: 42px;
+  height: 42px;
+
+  object-fit: contain;
+
+  display: block;
+
+  background: transparent;
+}
+
+
+.doctor-topbar__title {
+  font-size: 18px;
+
+  font-weight: 800;
+
+  letter-spacing: -0.3px;
+}
+
+
+.doctor-topbar__subtitle {
+  margin-top: 1px;
+
+  color: var(--mk-text-muted);
+
+  font-size: 11px;
+}
+
+
+.doctor-topbar__right {
+  display: flex;
+
+  align-items: center;
+
+  gap: 22px;
+}
+
+
+.doctor-doctor-identity {
+  display: flex;
+
+  align-items: center;
+
+  gap: 9px;
+}
+
+
+.doctor-small-avatar {
+  width: 34px;
+  height: 34px;
+
+  border-radius: 50%;
+
+  background: var(--mk-primary-light);
+
+  color: var(--mk-primary-dark);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  font-size: 12px;
+
+  font-weight: 800;
+}
+
+
+.doctor-doctor-identity div:last-child {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 2px;
+}
+
+
+.doctor-doctor-identity strong {
+  font-size: 12px;
+}
+
+
+.doctor-doctor-identity span {
+  font-size: 10px;
+
+  color: var(--mk-text-muted);
+}
+
+
+.doctor-topbar__logout {
+  border: none;
+
+  background: transparent;
+
+  color: var(--mk-text-secondary);
+
+  font-family: inherit;
+
+  font-size: 12px;
+
+  font-weight: 650;
+
+  cursor: pointer;
+}
+
+
+.doctor-topbar__logout:hover {
+  color: var(--mk-danger);
+}
+
+
+.doctor-topbar__back {
+  width: 38px;
+  height: 38px;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 9px;
+
+  background: white;
+
+  color: var(--mk-text);
+
+  font-size: 20px;
+
+  cursor: pointer;
+}
+
+
+.doctor-topbar__back:hover {
+  background: var(--mk-primary-light);
+}
+
+
+.doctor-session-id {
+  padding: 7px 10px;
+
+  background: var(--mk-surface-soft);
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 7px;
+
+  font-size: 11px;
+
+  color: var(--mk-text-secondary);
+}
+
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+
+.doctor-dashboard {
+  width: min(1180px, calc(100% - 48px));
+
+  margin: 0 auto;
+
+  padding: 36px 0 60px;
+}
+
+
+.doctor-dashboard-heading {
+  display: flex;
+
+  justify-content: space-between;
+
+  align-items: flex-end;
+
+  gap: 25px;
+
+  margin-bottom: 25px;
+}
+
+
+.doctor-dashboard-heading h1 {
+  margin: 0;
+
+  font-size: 28px;
+
+  letter-spacing: -0.7px;
+}
+
+
+.doctor-dashboard-heading p {
+  margin: 7px 0 0;
+
+  color: var(--mk-text-secondary);
+
+  font-size: 13px;
+}
+
+
+.doctor-refresh-button {
+  height: 38px;
+
+  padding: 0 14px;
+
+  border: 1px solid var(--mk-border-dark);
+
+  border-radius: 8px;
+
+  background: white;
+
+  color: var(--mk-text);
+
+  font-family: inherit;
+
+  font-size: 12px;
+
+  font-weight: 650;
+
+  cursor: pointer;
+}
+
+
+.doctor-refresh-button:hover {
+  border-color: var(--mk-primary);
+
+  color: var(--mk-primary);
+
+  background: var(--mk-primary-light);
+}
+
+
+/* ============================================================
+   STATS
+   ============================================================ */
+
+.doctor-stat-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, 1fr);
+
+  gap: 14px;
+
+  margin-bottom: 22px;
+}
+
+
+.doctor-stat-card {
+  min-height: 125px;
+
+  padding: 19px;
+
+  background: white;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 12px;
+
+  box-shadow: var(--mk-shadow-sm);
+
+  display: flex;
+
+  flex-direction: column;
+}
+
+
+.doctor-stat-card__label {
+  font-size: 11px;
+
+  color: var(--mk-text-muted);
+
+  font-weight: 700;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.5px;
+}
+
+
+.doctor-stat-card strong {
+  margin-top: 10px;
+
+  font-size: 30px;
+
+  line-height: 1;
+
+  letter-spacing: -1px;
+}
+
+
+.doctor-stat-card__hint {
+  margin-top: auto;
+
+  font-size: 10px;
+
+  color: var(--mk-text-muted);
+}
+
+
+.doctor-stat-card--pending {
+  border-top: 3px solid #d97706;
+}
+
+
+.doctor-stat-card--accepted {
+  border-top: 3px solid var(--mk-success);
+}
+
+
+.doctor-stat-card--rejected {
+  border-top: 3px solid var(--mk-danger);
+}
+
+
+/* ============================================================
+   CASE PANEL
+   ============================================================ */
+
+.doctor-cases-panel {
+  background: white;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 14px;
+
+  overflow: hidden;
+
+  box-shadow: var(--mk-shadow-sm);
+}
+
+
+.doctor-cases-header {
+  padding: 21px 24px;
+
+  border-bottom: 1px solid var(--mk-border);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 20px;
+}
+
+
+.doctor-cases-header h2 {
+  margin: 0;
+
+  font-size: 17px;
+
+  font-weight: 750;
+}
+
+
+.doctor-cases-header p {
+  margin: 5px 0 0;
+
+  font-size: 11px;
+
+  color: var(--mk-text-muted);
+}
+
+
+.doctor-case-tools {
+  display: flex;
+
+  align-items: center;
+
+  gap: 9px;
+}
+
+
+.doctor-search {
+  width: 240px;
+
+  height: 37px;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 0 10px;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 8px;
+
+  background: var(--mk-surface-soft);
+}
+
+
+.doctor-search span {
+  color: var(--mk-text-muted);
+
+  font-size: 17px;
+}
+
+
+.doctor-search input {
+  min-width: 0;
+
+  width: 100%;
+
+  border: none;
+
+  outline: none;
+
+  background: transparent;
+
+  color: var(--mk-text);
+
+  font-family: inherit;
+
+  font-size: 11px;
+}
+
+
+.doctor-filter {
+  height: 37px;
+
+  padding: 0 10px;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 8px;
+
+  background: white;
+
+  color: var(--mk-text);
+
+  font-family: inherit;
+
+  font-size: 11px;
+
+  outline: none;
+}
+
+
+/* ============================================================
+   CASE TABLE
+   ============================================================ */
+
+.doctor-case-table-wrapper {
+  overflow-x: auto;
+}
+
+
+.doctor-case-table {
+  width: 100%;
+
+  border-collapse: collapse;
+
+  min-width: 780px;
+}
+
+
+.doctor-case-table th {
+  padding: 12px 20px;
+
+  text-align: left;
+
+  background: var(--mk-surface-soft);
+
+  border-bottom: 1px solid var(--mk-border);
+
+  color: var(--mk-text-muted);
+
+  font-size: 9px;
+
+  font-weight: 800;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.7px;
+}
+
+
+.doctor-case-table td {
+  padding: 14px 20px;
+
+  border-bottom: 1px solid var(--mk-border);
+
+  font-size: 12px;
+
+  vertical-align: middle;
+}
+
+
+.doctor-case-table tbody tr {
+  transition:
+    background 0.15s ease;
+}
+
+
+.doctor-case-table tbody tr:hover {
+  background: #f8fcfb;
+}
+
+
+.doctor-table-patient {
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+}
+
+
+.doctor-table-avatar {
+  width: 34px;
+  height: 34px;
+
+  border-radius: 9px;
+
+  background: var(--mk-primary-light);
+
+  color: var(--mk-primary-dark);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  font-size: 11px;
+
+  font-weight: 800;
+}
+
+
+.doctor-table-patient > div:last-child {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 3px;
+}
+
+
+.doctor-table-patient strong {
+  font-size: 12px;
+}
+
+
+.doctor-table-patient span {
+  font-size: 10px;
+
+  color: var(--mk-text-muted);
+}
+
+
+.doctor-table-muted {
+  color: var(--mk-text-secondary);
+
+  font-size: 11px;
+}
+
+
+.doctor-session-chip {
+  color: var(--mk-primary-dark);
+
+  background: var(--mk-primary-light);
+
+  padding: 5px 8px;
+
+  border-radius: 6px;
+
+  font-size: 10px;
+
+  font-weight: 700;
+}
+
+
+/* ============================================================
+   CASE STATUS
+   ============================================================ */
+
+.doctor-case-status {
+  display: inline-flex;
+
+  align-items: center;
+
+  gap: 6px;
+
+  font-size: 10px;
+
+  font-weight: 700;
+}
+
+
+.doctor-case-status__dot {
+  width: 6px;
+  height: 6px;
+
+  border-radius: 50%;
+
+  background: currentColor;
+}
+
+
+.doctor-case-status--pending {
+  color: var(--mk-warning);
+}
+
+
+.doctor-case-status--accepted {
+  color: var(--mk-success);
+}
+
+
+.doctor-case-status--rejected {
+  color: var(--mk-danger);
+}
+
+
+/* ============================================================
+   REVIEW BUTTON
+   ============================================================ */
+
+.doctor-review-button {
+  height: 32px;
+
+  padding: 0 11px;
+
+  border: 1px solid var(--mk-primary);
+
+  border-radius: 7px;
+
+  background: white;
+
+  color: var(--mk-primary);
+
+  font-family: inherit;
+
+  font-size: 10px;
+
+  font-weight: 750;
+
+  cursor: pointer;
+
+  display: inline-flex;
+
+  align-items: center;
+
+  gap: 7px;
+}
+
+
+.doctor-review-button:hover {
+  background: var(--mk-primary);
+
+  color: white;
+}
+
+
+.doctor-review-button span {
+  font-size: 14px;
+}
+
+
+/* ============================================================
+   NO CASES
+   ============================================================ */
+
+.doctor-no-cases {
+  padding: 70px 25px;
+
+  text-align: center;
+}
+
+
+.doctor-no-cases__icon {
+  width: 45px;
+  height: 45px;
+
+  margin: 0 auto 14px;
+
+  border-radius: 50%;
+
+  background: var(--mk-primary-light);
+
+  color: var(--mk-primary);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  font-weight: 800;
+}
+
+
+.doctor-no-cases h3 {
+  margin: 0;
+
+  font-size: 15px;
+}
+
+
+.doctor-no-cases p {
+  margin: 7px 0 0;
+
+  color: var(--mk-text-muted);
+
+  font-size: 12px;
+}
+
+
+/* ============================================================
+   SHARED BUTTONS
+   ============================================================ */
+
+.doctor-button {
+  min-height: 42px;
+
+  padding: 0 16px;
+
+  border-radius: 8px;
+
+  font-family: inherit;
+
+  font-size: 12px;
+
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+
+.doctor-button--primary {
+  border: 1px solid var(--mk-primary);
+
+  background: var(--mk-primary);
+
+  color: white;
+}
+
+
+.doctor-button--primary:hover {
+  background: var(--mk-primary-dark);
+}
+
+
+.doctor-button--secondary {
+  border: 1px solid var(--mk-border-dark);
+
+  background: white;
+
+  color: var(--mk-text);
+}
+
+
+.doctor-button--secondary:hover {
+  border-color: var(--mk-primary);
+
+  background: var(--mk-primary-light);
+}
+
+
+.doctor-button--danger {
+  border: 1px solid #fecaca;
+
+  background: white;
+
+  color: var(--mk-danger);
+}
+
+
+.doctor-button--danger:hover {
+  background: var(--mk-danger-bg);
+}
+
+
+/* ============================================================
+   LOADING
+   ============================================================ */
+
+.doctor-loading {
+  min-height: 75vh;
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  justify-content: center;
+
+  gap: 14px;
+
+  color: var(--mk-text-secondary);
+}
+
+
+.doctor-loading__spinner {
+  width: 34px;
+  height: 34px;
+
+  border: 3px solid var(--mk-primary-light);
+
+  border-top-color: var(--mk-primary);
+
+  border-radius: 50%;
+
+  animation:
+    doctor-spin 0.8s linear infinite;
+}
+
+
+@keyframes doctor-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+/* ============================================================
+   ERROR
+   ============================================================ */
+
+.doctor-error-card {
+  width: min(500px, calc(100% - 40px));
+
+  margin: 110px auto;
+
+  padding: 35px;
+
+  background: white;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 14px;
+
+  text-align: center;
+
+  box-shadow: var(--mk-shadow);
+}
+
+
+.doctor-error-card__icon {
+  width: 42px;
+  height: 42px;
+
+  margin: 0 auto 14px;
+
+  border-radius: 50%;
+
+  background: var(--mk-danger-bg);
+
+  color: var(--mk-danger);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  font-size: 19px;
+
+  font-weight: 800;
+}
+
+
+.doctor-error-card h1 {
+  margin: 0;
+
+  font-size: 21px;
+}
+
+
+.doctor-error-card p {
+  margin: 9px 0 20px;
+
+  color: var(--mk-text-secondary);
+
+  font-size: 12px;
+
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   SESSION REVIEW
+   ============================================================ */
+
+.doctor-review-layout {
+  width: min(1180px, calc(100% - 48px));
+
+  margin: 0 auto;
+
+  padding: 32px 0 60px;
+}
+
+
+.doctor-patient-header {
+  background: white;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 14px;
+
+  padding: 24px 28px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 30px;
+
+  box-shadow: var(--mk-shadow-sm);
+}
+
+
+.doctor-patient-header__identity {
+  display: flex;
+
+  align-items: center;
+
+  gap: 15px;
+}
+
+
+.doctor-patient-avatar {
+  width: 56px;
+  height: 56px;
+
+  border-radius: 50%;
+
+  background: var(--mk-primary-light);
+
+  color: var(--mk-primary-dark);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  font-size: 21px;
+
+  font-weight: 800;
+}
+
+
+.doctor-patient-header__label {
+  margin: 0 0 3px;
+
+  color: var(--mk-text-muted);
+
+  font-size: 10px;
+
+  font-weight: 800;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.8px;
+}
+
+
+.doctor-patient-header h1 {
+  margin: 0;
+
+  font-size: 24px;
+
+  letter-spacing: -0.5px;
+}
+
+
+.doctor-patient-header__identity p:last-child {
+  margin: 5px 0 0;
+
+  color: var(--mk-text-secondary);
+
+  font-size: 11px;
+}
+
+
+.doctor-patient-header__details {
+  display: flex;
+
+  border-left: 1px solid var(--mk-border);
+}
+
+
+.doctor-patient-header__details > div {
+  min-width: 105px;
+
+  padding: 0 18px;
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 5px;
+}
+
+
+.doctor-patient-header__details span {
+  color: var(--mk-text-muted);
+
+  font-size: 9px;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.6px;
+}
+
+
+.doctor-patient-header__details strong {
+  font-size: 12px;
+}
+
+
+/* ============================================================
+   REVIEW STATUS
+   ============================================================ */
+
+.doctor-review-status {
+  margin-top: 14px;
+
+  padding: 13px 18px;
+
+  background: white;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 10px;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 30px;
+
+  box-shadow: var(--mk-shadow-sm);
+}
+
+
+.doctor-review-status > div {
+  display: flex;
+
+  align-items: center;
+
+  gap: 9px;
+}
+
+
+.doctor-review-status__label {
+  color: var(--mk-text-muted);
+
+  font-size: 10px;
+
+  font-weight: 650;
+}
+
+
+.doctor-status {
+  display: inline-flex;
+
+  padding: 5px 9px;
+
+  border-radius: 999px;
+
+  font-size: 10px;
+
+  font-weight: 750;
+}
+
+
+.doctor-status--draft {
+  background: var(--mk-warning-bg);
+
+  color: var(--mk-warning);
+}
+
+
+.doctor-status--accepted {
+  background: var(--mk-success-bg);
+
+  color: var(--mk-success);
+}
+
+
+.doctor-status--rejected,
+.doctor-status--danger {
+  background: var(--mk-danger-bg);
+
+  color: var(--mk-danger);
+}
+
+
+.doctor-status--warning {
+  background: var(--mk-warning-bg);
+
+  color: var(--mk-warning);
+}
+
+
+/* ============================================================
+   SUMMARY
+   ============================================================ */
+
+.doctor-summary-card {
+  margin-top: 20px;
+
+  background: white;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 14px;
+
+  overflow: hidden;
+
+  box-shadow: var(--mk-shadow);
+}
+
+
+.doctor-summary-card__header {
+  padding: 24px 28px;
+
+  border-bottom: 1px solid var(--mk-border);
+
+  display: flex;
+
+  justify-content: space-between;
+
+  align-items: flex-start;
+}
+
+
+.doctor-section-eyebrow {
+  margin: 0 0 6px;
+
+  color: var(--mk-primary);
+
+  font-size: 9px;
+
+  font-weight: 800;
+
+  letter-spacing: 1.1px;
+}
+
+
+.doctor-summary-card__header h2 {
+  margin: 0;
+
+  font-size: 19px;
+}
+
+
+.doctor-summary-card__header p:last-child {
+  margin: 6px 0 0;
+
+  color: var(--mk-text-secondary);
+
+  font-size: 12px;
+}
+
+
+.doctor-draft-badge {
+  padding: 7px 10px;
+
+  background: var(--mk-warning-bg);
+
+  color: var(--mk-warning);
+
+  border-radius: 7px;
+
+  font-size: 10px;
+
+  font-weight: 700;
+}
+
+
+.doctor-summary-content {
+  padding: 0 28px 25px;
+}
+
+
+.review-section {
+  padding: 21px 0;
+
+  border-bottom: 1px solid var(--mk-border);
+}
+
+
+.review-section:last-child {
+  border-bottom: none;
+}
+
+
+.review-section__header h2 {
+  margin: 0 0 12px;
+
+  font-size: 14px;
+}
+
+
+.review-section__content {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 8px;
+}
+
+
+.review-item {
+  padding: 12px 14px;
+
+  background: var(--mk-surface-soft);
+
+  border: 1px solid #e6efee;
+
+  border-radius: 8px;
+}
+
+
+.review-item__question {
+  margin-bottom: 4px;
+
+  color: var(--mk-text-secondary);
+
+  font-size: 11px;
+
+  font-weight: 650;
+}
+
+
+.review-item__answer {
+  color: var(--mk-text);
+
+  font-size: 13px;
+
+  line-height: 1.55;
+
+  white-space: pre-line;
+}
+
+
+.review-section__empty {
+  padding: 12px 14px;
+
+  border: 1px dashed var(--mk-border-dark);
+
+  border-radius: 8px;
+
+  color: var(--mk-text-muted);
+
+  font-size: 11px;
+}
+
+
+/* ============================================================
+   RED FLAGS
+   ============================================================ */
+
+.doctor-alert-card {
+  margin-top: 20px;
+
+  padding: 19px 21px;
+
+  display: flex;
+
+  gap: 13px;
+
+  background: var(--mk-danger-bg);
+
+  border: 1px solid #fecaca;
+
+  border-radius: 12px;
+}
+
+
+.doctor-alert-card__icon {
+  width: 31px;
+  height: 31px;
+
+  flex: 0 0 auto;
+
+  border-radius: 50%;
+
+  background: var(--mk-danger);
+
+  color: white;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  font-weight: 800;
+}
+
+
+.doctor-alert-card h2 {
+  margin: 0 0 4px;
+
+  color: #991b1b;
+
+  font-size: 15px;
+}
+
+
+.doctor-alert-card p,
+.doctor-alert-card li {
+  color: #7f1d1d;
+
+  font-size: 11px;
+
+  line-height: 1.5;
+}
+
+
+.doctor-alert-card p {
+  margin: 0;
+}
+
+
+.doctor-alert-card ul {
+  margin: 9px 0 0;
+
+  padding-left: 18px;
+}
+
+
+/* ============================================================
+   DOCUMENTS / RESPONSES
+   ============================================================ */
+
+.doctor-documents-card,
+.doctor-responses-card {
+  margin-top: 20px;
+
+  background: white;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 12px;
+
+  box-shadow: var(--mk-shadow-sm);
+
+  overflow: hidden;
+}
+
+
+.doctor-card-heading {
+  padding: 19px 23px;
+
+  border-bottom: 1px solid var(--mk-border);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+}
+
+
+.doctor-card-heading h2 {
+  margin: 0;
+
+  font-size: 16px;
+}
+
+
+.doctor-card-heading > span {
+  color: var(--mk-text-muted);
+
+  font-size: 10px;
+}
+
+
+.doctor-documents-list {
+  padding: 5px 23px;
+}
+
+
+.doctor-document-row {
+  min-height: 63px;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+
+  border-bottom: 1px solid var(--mk-border);
+}
+
+
+.doctor-document-row:last-child {
+  border-bottom: none;
+}
+
+
+.doctor-document-icon {
+  width: 36px;
+  height: 36px;
+
+  border-radius: 8px;
+
+  background: var(--mk-primary-light);
+
+  color: var(--mk-primary-dark);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  font-size: 8px;
+
+  font-weight: 800;
+}
+
+
+.doctor-document-info {
+  flex: 1;
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 3px;
+}
+
+
+.doctor-document-info strong {
+  font-size: 11px;
+}
+
+
+.doctor-document-info span {
+  color: var(--mk-text-muted);
+
+  font-size: 9px;
+}
+
+
+.doctor-document-status {
+  padding: 5px 8px;
+
+  border-radius: 6px;
+
+  font-size: 9px;
+
+  font-weight: 700;
+}
+
+
+.doctor-document-status--completed,
+.doctor-document-status--processed {
+  background: var(--mk-success-bg);
+
+  color: var(--mk-success);
+}
+
+
+.doctor-document-status--processing {
+  background: var(--mk-warning-bg);
+
+  color: var(--mk-warning);
+}
+
+
+.doctor-document-status--failed {
+  background: var(--mk-danger-bg);
+
+  color: var(--mk-danger);
+}
+
+
+.doctor-card-empty {
+  padding: 25px;
+
+  text-align: center;
+
+  color: var(--mk-text-muted);
+
+  font-size: 11px;
+}
+
+
+/* Responses */
+
+.doctor-responses-card summary {
+  padding: 18px 23px;
+
+  cursor: pointer;
+
+  font-size: 12px;
+
+  font-weight: 700;
+}
+
+
+.doctor-responses-list {
+  padding: 5px 23px 20px;
+
+  border-top: 1px solid var(--mk-border);
+}
+
+
+.doctor-response-row {
+  padding: 13px 0;
+
+  border-bottom: 1px solid var(--mk-border);
+}
+
+
+.doctor-response-row:last-child {
+  border-bottom: none;
+}
+
+
+.doctor-response-question {
+  margin-bottom: 4px;
+
+  color: var(--mk-text-secondary);
+
+  font-size: 10px;
+
+  font-weight: 650;
+}
+
+
+.doctor-response-answer {
+  font-size: 12px;
+
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   DECISION
+   ============================================================ */
+
+.doctor-decision-card {
+  margin-top: 22px;
+
+  padding: 24px 27px;
+
+  background: white;
+
+  border: 1px solid var(--mk-border);
+
+  border-radius: 13px;
+
+  box-shadow: var(--mk-shadow);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 25px;
+}
+
+
+.doctor-decision-card h2 {
+  margin: 0;
+
+  font-size: 17px;
+}
+
+
+.doctor-decision-card > div:first-child > p:last-child {
+  margin: 6px 0 0;
+
+  max-width: 600px;
+
+  color: var(--mk-text-secondary);
+
+  font-size: 11px;
+
+  line-height: 1.5;
+}
+
+
+.doctor-decision-actions {
+  display: flex;
+
+  gap: 8px;
+
+  flex-shrink: 0;
+}
+
+
+/* ============================================================
+   EDITOR
+   ============================================================ */
+
+.doctor-editor {
+  padding: 25px 28px 28px;
+}
+
+
+.doctor-editor label {
+  display: block;
+
+  margin-bottom: 5px;
+
+  font-size: 13px;
+
+  font-weight: 750;
+}
+
+
+.doctor-editor__hint {
+  margin: 0 0 13px;
+
+  color: var(--mk-text-secondary);
+
+  font-size: 11px;
+
+  line-height: 1.5;
+}
+
+
+.doctor-editor textarea {
+  width: 100%;
+
+  min-height: 500px;
+
+  padding: 14px;
+
+  border: 1px solid var(--mk-border-dark);
+
+  border-radius: 9px;
+
+  background: #fbfdfd;
+
+  color: var(--mk-text);
+
+  font-family:
+    Consolas,
+    "SFMono-Regular",
+    monospace;
+
+  font-size: 11px;
+
+  line-height: 1.6;
+
+  resize: vertical;
+
+  outline: none;
+}
+
+
+.doctor-editor textarea:focus {
+  border-color: var(--mk-primary);
+
+  box-shadow:
+    0 0 0 3px rgba(15, 118, 110, 0.1);
+}
+
+
+.doctor-editor__actions {
+  margin-top: 14px;
+
+  display: flex;
+
+  justify-content: flex-end;
+
+  gap: 8px;
+}
+
+
+/* ============================================================
+   ACTION ERROR
+   ============================================================ */
+
+.doctor-action-error {
+  margin-top: 14px;
+
+  padding: 11px 14px;
+
+  background: var(--mk-danger-bg);
+
+  border: 1px solid #fecaca;
+
+  border-radius: 8px;
+
+  color: var(--mk-danger);
+
+  font-size: 11px;
+
+  font-weight: 600;
+}
+
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+
+.doctor-empty-state {
+  padding: 55px 25px;
+
+  text-align: center;
+}
+
+
+.doctor-empty-state h3 {
+  margin: 0;
+
+  font-size: 15px;
+}
+
+
+.doctor-empty-state p {
+  margin: 7px 0 0;
+
+  color: var(--mk-text-secondary);
+
+  font-size: 11px;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 900px) {
+
+  .doctor-login-shell {
+    grid-template-columns: 1fr;
+  }
+
+
+  .doctor-login-brand {
+    padding: 35px;
+  }
+
+
+  .doctor-login-brand h1 {
+    font-size: 30px;
+  }
+
+
+  .doctor-login-card {
+    padding: 35px;
+  }
+
+
+  .doctor-stat-grid {
+    grid-template-columns:
+      repeat(2, 1fr);
+  }
+
+
+  .doctor-cases-header {
+    align-items: flex-start;
+
+    flex-direction: column;
+  }
+
+
+  .doctor-case-tools {
+    width: 100%;
+  }
+
+
+  .doctor-search {
+    flex: 1;
+  }
+
+
+  .doctor-patient-header {
+    align-items: flex-start;
+
+    flex-direction: column;
+  }
+
+
+  .doctor-patient-header__details {
+    width: 100%;
+
+    padding-top: 18px;
+
+    border-top: 1px solid var(--mk-border);
+
+    border-left: none;
+  }
+
+
+  .doctor-decision-card {
+    align-items: flex-start;
+
+    flex-direction: column;
+  }
+
+
+  .doctor-decision-actions {
+    width: 100%;
+  }
+
+
+  .doctor-decision-actions .doctor-button {
+    flex: 1;
+  }
+
+}
+
+
+@media (max-width: 650px) {
+
+  .doctor-login-page {
+    padding: 12px;
+  }
+
+
+  .doctor-login-shell {
+    min-height: auto;
+
+    border-radius: 15px;
+  }
+
+
+  .doctor-login-brand {
+    padding: 30px;
+  }
+
+
+  .doctor-login-logo {
+    width: 68px;
+    height: 68px;
+  }
+
+
+  .doctor-login-logo img {
+    width: 65px;
+    height: 65px;
+  }
+
+
+  .doctor-login-brand h1 {
+    font-size: 27px;
+  }
+
+
+  .doctor-login-card {
+    padding: 30px;
+  }
+
+
+  .doctor-topbar {
+    padding: 12px 15px;
+  }
+
+
+  .doctor-doctor-identity {
+    display: none;
+  }
+
+
+  .doctor-dashboard,
+  .doctor-review-layout {
+    width: calc(100% - 20px);
+
+    padding-top: 22px;
+  }
+
+
+  .doctor-dashboard-heading {
+    align-items: flex-start;
+
+    flex-direction: column;
+  }
+
+
+  .doctor-stat-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+
+  .doctor-case-tools {
+    align-items: stretch;
+
+    flex-direction: column;
+  }
+
+
+  .doctor-search {
+    width: 100%;
+  }
+
+
+  .doctor-filter {
+    width: 100%;
+  }
+
+
+  .doctor-review-status {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    gap: 10px;
+  }
+
+
+  .doctor-patient-header {
+    padding: 20px;
+  }
+
+
+  .doctor-patient-header__details {
+    display: grid;
+
+    grid-template-columns:
+      repeat(3, 1fr);
+
+    gap: 8px;
+  }
+
+
+  .doctor-patient-header__details > div {
+    min-width: 0;
+
+    padding: 0;
+  }
+
+
+  .doctor-summary-card__header {
+    padding: 20px;
+
+    flex-direction: column;
+  }
+
+
+  .doctor-summary-content {
+    padding: 0 20px 20px;
+  }
+
+
+  .doctor-decision-actions {
+    flex-direction: column;
+  }
+
+
+  .doctor-decision-actions .doctor-button {
+    width: 100%;
+  }
+
+
+  .doctor-editor {
+    padding: 20px;
+  }
+
+}

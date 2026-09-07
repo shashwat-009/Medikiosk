@@ -1,5 +1,8 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Outlet } from "react-router-dom";
+
 import { KioskProvider } from "./context/KioskContext";
+
+import KioskShell from "./components/kiosk/KioskShell";
 
 // Patient pages
 import Welcome from "./pages/patient/Welcome";
@@ -16,29 +19,101 @@ import DoctorLogin from "./pages/doctor/Login";
 import DoctorDashboard from "./pages/doctor/Dashboard";
 import SessionReview from "./pages/doctor/SessionReview";
 
+
+/* ============================================================
+   PATIENT / KIOSK LAYOUT
+   ============================================================ */
+
+function KioskLayout() {
+  return (
+    <KioskShell>
+      <Outlet />
+    </KioskShell>
+  );
+}
+
+
+/* ============================================================
+   APP
+   ============================================================ */
+
 export default function App() {
   return (
     <KioskProvider>
-      <Routes>
-        {/* Patient / Kiosk Flow */}
-        <Route path="/" element={<Welcome />} />
-        <Route path="/identify" element={<Identify />} />
-        <Route path="/consent" element={<Consent />} />
-        <Route path="/interview" element={<Interview />} />
-        <Route path="/documents" element={<Documents />} />
-        <Route path="/processing" element={<Processing />} />
-        <Route path="/confirmation" element={<Confirmation />} />
-        <Route path="/mode" element={<ModeSelection />} />
-        
 
-        {/* Doctor Flow */}
-        <Route path="/doctor/login" element={<DoctorLogin />} />
-        <Route path="/doctor" element={<DoctorDashboard />} />
+      <Routes>
+
+        {/* ==================================================
+            PATIENT / KIOSK FLOW
+            ================================================== */}
+
+        <Route element={<KioskLayout />}>
+
+          <Route
+            path="/"
+            element={<Welcome />}
+          />
+
+          <Route
+            path="/identify"
+            element={<Identify />}
+          />
+
+          <Route
+            path="/consent"
+            element={<Consent />}
+          />
+
+          <Route
+            path="/mode"
+            element={<ModeSelection />}
+          />
+
+          <Route
+            path="/interview"
+            element={<Interview />}
+          />
+
+          <Route
+            path="/documents"
+            element={<Documents />}
+          />
+
+          <Route
+            path="/processing"
+            element={<Processing />}
+          />
+
+          <Route
+            path="/confirmation"
+            element={<Confirmation />}
+          />
+
+        </Route>
+
+
+        {/* ==================================================
+            DOCTOR FLOW
+            No kiosk header here
+            ================================================== */}
+
+        <Route
+          path="/doctor/login"
+          element={<DoctorLogin />}
+        />
+
+        <Route
+          path="/doctor"
+          element={<DoctorDashboard />}
+        />
+
         <Route
           path="/doctor/session/:sessionId"
           element={<SessionReview />}
         />
+
       </Routes>
+
     </KioskProvider>
   );
 }

@@ -1,9 +1,15 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useKiosk } from "../../context/KioskContext";
 import { translate } from "../../i18n";
 
+import {
+  assignDoctorToSession,
+} from "../../services/sessionService";
+
 import "./ModeSelection.css";
+
 
 export default function ModeSelection() {
   const navigate = useNavigate();
@@ -11,14 +17,68 @@ export default function ModeSelection() {
   const {
     state,
     setMode,
+    setSession,
   } = useKiosk();
 
   const language = state.language || "en";
 
-  function handleModeSelect(mode) {
-    setMode(mode);
-    navigate("/interview");
+  const [isAssigning, setIsAssigning] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+
+  async function handleModeSelect(mode) {
+    if (isAssigning) {
+      return;
+    }
+
+    if (!state.session?.id) {
+      setError(
+        "No active session found. Please restart the visit."
+      );
+
+      return;
+    }
+
+    setError("");
+    setIsAssigning(true);
+
+    try {
+      // Store selected consultation mode
+      setMode(mode);
+
+      // Assign the appropriate doctor on the backend
+      const updatedSession =
+        await assignDoctorToSession(
+          state.session.id,
+          mode
+        );
+
+      // Store the updated session
+      // This now contains doctor_id
+      setSession(updatedSession);
+
+      // Continue to interview
+      navigate("/interview");
+
+    } catch (err) {
+      console.error(
+        "Failed to assign doctor:",
+        err
+      );
+
+      setError(
+        err.message ||
+          "Unable to assign a doctor. Please try again."
+      );
+
+    } finally {
+      setIsAssigning(false);
+    }
   }
+
 
   return (
     <main className="mode-selection">
@@ -31,7 +91,10 @@ export default function ModeSelection() {
           <button
             type="button"
             className="mode-selection__back"
-            onClick={() => navigate("/consent")}
+            onClick={() =>
+              navigate("/consent")
+            }
+            disabled={isAssigning}
           >
             ←{" "}
             {translate(
@@ -75,6 +138,18 @@ export default function ModeSelection() {
         </div>
 
 
+        {/* Error */}
+
+        {error && (
+          <p
+            className="mode-selection__error"
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
+
+
         {/* Mode options */}
 
         <div className="mode-selection__options">
@@ -85,8 +160,11 @@ export default function ModeSelection() {
             type="button"
             className="mode-selection__card"
             onClick={() =>
-              handleModeSelect("allopathy")
+              handleModeSelect(
+                "allopathy"
+              )
             }
+            disabled={isAssigning}
           >
 
             <div className="mode-selection__icon">
@@ -112,7 +190,7 @@ export default function ModeSelection() {
             </div>
 
             <span className="mode-selection__arrow">
-              →
+              {isAssigning ? "..." : "→"}
             </span>
 
           </button>
@@ -124,8 +202,11 @@ export default function ModeSelection() {
             type="button"
             className="mode-selection__card"
             onClick={() =>
-              handleModeSelect("ayush")
+              handleModeSelect(
+                "ayush"
+              )
             }
+            disabled={isAssigning}
           >
 
             <div className="mode-selection__icon">
@@ -151,7 +232,7 @@ export default function ModeSelection() {
             </div>
 
             <span className="mode-selection__arrow">
-              →
+              {isAssigning ? "..." : "→"}
             </span>
 
           </button>
