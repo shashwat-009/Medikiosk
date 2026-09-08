@@ -19,6 +19,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from ai.conversation.red_flags import RedFlagDetector
 from ai.summary.case_sheet import build_case_sheet
 from ai.summary.merger import merge_sources
 from ai.summary.schemas import build_summary_input
@@ -43,6 +44,10 @@ def _build_conversation_data(
     clinical categories so the deterministic merger can build
     separate summary sections.
 
+    Red flags are detected again from the persisted patient answers
+    so that the final clinical summary does not depend on the
+    in-memory conversation manager.
+
     No medical meaning is inferred from the answer.
     """
 
@@ -56,7 +61,15 @@ def _build_conversation_data(
         "allergies": [],
         "investigations": [],
         "relevant_negatives": [],
+        "red_flags": [],
     }
+
+    red_flag_detector = RedFlagDetector()
+
+    # One doctor-facing red flag per category within this session.
+    # Multiple patient statements are preserved as evidence.
+    red_flags_by_category: dict[str, dict[str, Any]] = {}
+
 
     for response in responses:
         question = (response.question or "").strip()
@@ -77,6 +90,77 @@ def _build_conversation_data(
         # ----------------------------------------------------
 
         conversation["history"].append(item)
+
+        # ----------------------------------------------------
+        # Red-flag detection
+        #
+        # Re-run detection from the persisted response.
+        #
+        # This is intentionally independent from the in-memory
+        # DialogueManager so summary generation remains reliable
+        # even after the conversation process has ended.
+        #
+        # IMPORTANT:
+        # Red flags are aggregated ONLY from the responses
+        # belonging to this session.
+        #
+        # Multiple detections of the same red-flag category
+        # are grouped together while preserving the patient's
+        # different statements as evidence.
+        # ----------------------------------------------------
+
+        detected_flag = red_flag_detector.detect(answer)
+
+        if detected_flag.detected:
+
+            category = (
+                detected_flag.flag_id
+                or detected_flag.category
+            )
+
+            if category:
+
+                priority = (
+                    detected_flag.priority.value
+                    if detected_flag.priority is not None
+                    else None
+                )
+
+                existing = (
+                    red_flags_by_category.get(category)
+                )
+
+                if existing is None:
+
+                    existing = {
+                        "flag_id": category,
+                        "category": category,
+                        "priority": priority,
+                        "evidence": [],
+                    }
+
+                    red_flags_by_category[category] = existing
+
+                    conversation["red_flags"].append(
+                        existing
+                    )
+
+                # Preserve the actual patient statement.
+                matched_text = (
+                    detected_flag.matched_text
+                    or answer
+                )
+
+                evidence = {
+                    "text": matched_text,
+                    "question": question,
+                }
+
+                # Avoid adding the exact same evidence twice.
+                if evidence not in existing["evidence"]:
+                    existing["evidence"].append(
+                        evidence
+                    )
 
         question_lower = question.lower()
 
@@ -466,6 +550,7 @@ def generate_deterministic_summary(
     - interview responses are loaded from the session
     - only completed OCR documents are included
     - medical timeline is included
+    - red flags are detected from persisted responses
     - no LLM/network call is made
     """
 
