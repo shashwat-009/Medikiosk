@@ -2157,12 +2157,52 @@ export default function SessionReview() {
                       </div>
                     </div>
 
-                    <span
-                      className={`doctor-document-status doctor-document-status--${document.processing_status || "unknown"
-                        }`}
+                    <div
+                      className="doctor-document-card__actions"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        flexWrap: "wrap",
+                        justifyContent: "flex-end",
+                      }}
                     >
-                      {formatLabel(document.processing_status || "unknown")}
-                    </span>
+                      <span
+                        className={`doctor-document-status doctor-document-status--${document.processing_status || "unknown"
+                          }`}
+                      >
+                        {formatLabel(document.processing_status || "unknown")}
+                      </span>
+
+                      <button
+                        type="button"
+                        className="doctor-document-view-button"
+                        onClick={() => {
+                          const apiBaseUrl =
+                            import.meta.env.VITE_API_BASE_URL ??
+                            "http://localhost:8000";
+
+                          window.open(
+                            `${apiBaseUrl}/documents/${document.id}/file`,
+                            "_blank",
+                            "noopener,noreferrer"
+                          );
+                        }}
+                        style={{
+                          border: "1px solid rgba(22, 96, 92, 0.18)",
+                          background: "#ffffff",
+                          color: "#16605c",
+                          borderRadius: "8px",
+                          padding: "8px 12px",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        View Report →
+                      </button>
+                    </div>
                   </article>
                 ))}
               </div>

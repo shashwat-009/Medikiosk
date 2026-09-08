@@ -42,11 +42,36 @@ export default function Dashboard() {
 
       setDoctor(doctorData);
 
-      setSessions(
-        Array.isArray(sessionsData)
-          ? sessionsData
-          : []
+      const sessionList = Array.isArray(sessionsData)
+        ? sessionsData
+        : [];
+
+      const enrichedSessions = await Promise.all(
+        sessionList.map(async (session) => {
+          try {
+            const review = await api(
+              `/doctors/${doctorId}/sessions/${session.id}/review`
+            );
+
+            return {
+              ...session,
+              ...review,
+            };
+          } catch (err) {
+            console.error(
+              `Unable to load review for session ${session.id}`,
+              err
+            );
+
+            return {
+              ...session,
+              summary: null,
+            };
+          }
+        })
       );
+
+      setSessions(enrichedSessions);
     } catch (err) {
       console.error("Dashboard loading error:", err);
 
@@ -73,11 +98,21 @@ export default function Dashboard() {
      ============================================================ */
 
   function getStatus(session) {
-    return (
+    const summaryStatus = (
+      session?.summary?.status ||
       session?.summary_status ||
-      session?.status ||
-      "pending"
+      "draft"
     ).toLowerCase();
+
+    if (summaryStatus === "accepted") {
+      return "accepted";
+    }
+
+    if (summaryStatus === "rejected") {
+      return "rejected";
+    }
+
+    return "draft";
   }
 
   function getStatusLabel(status) {
@@ -89,14 +124,6 @@ export default function Dashboard() {
         return "Rejected";
 
       case "draft":
-        return "Pending Review";
-
-      case "completed":
-        return "Completed";
-
-      case "active":
-        return "In Progress";
-
       default:
         return "Pending Review";
     }

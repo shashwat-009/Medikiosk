@@ -12,6 +12,7 @@ from fastapi import (
     UploadFile,
 )
 from sqlalchemy.orm import Session
+from fastapi.responses import FileResponse
 
 from ai.ocr.file_validator import validate_file
 from app.db.database import get_db
@@ -433,6 +434,71 @@ def get_documents(
     return db.query(
         Document
     ).all()
+
+
+# ============================================================
+# VIEW / DOWNLOAD ORIGINAL DOCUMENT
+# ============================================================
+
+@router.get(
+    "/{document_id}/file"
+)
+def view_document_file(
+    document_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Serve the original uploaded medical document.
+
+    The stored file itself is never modified by OCR or summary editing.
+    Physicians can open the original source record from the clinical
+    review page.
+    """
+
+    document = db.query(
+        Document
+    ).filter(
+        Document.id == document_id
+    ).first()
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found"
+        )
+
+    if not document.file_path or not os.path.exists(
+        document.file_path
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Document file not found"
+        )
+
+    extension = os.path.splitext(
+        document.filename or document.file_path
+    )[1].lower()
+
+    media_types = {
+        ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
+
+    media_type = media_types.get(
+        extension,
+        "application/octet-stream"
+    )
+
+    return FileResponse(
+        path=document.file_path,
+        filename=document.filename,
+        media_type=media_type,
+        content_disposition_type="inline",
+    )
 
 
 # ============================================================
