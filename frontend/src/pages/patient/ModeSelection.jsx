@@ -104,7 +104,7 @@ export default function ModeSelection() {
           </button>
 
           <div className="mode-selection__step">
-            3 / 4
+            3 / 3
           </div>
 
         </div>

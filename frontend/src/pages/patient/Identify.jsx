@@ -304,9 +304,9 @@ export default function Identify() {
             {t("common.back", "Back")}
           </button>
 
-          <span className="identify__step">
-            {t("identify.stepLabel", "1 / 3")}
-          </span>
+          <div className="mode-selection__step">
+            1 / 3
+          </div>
         </header>
 
         <div className="identify__intro">
