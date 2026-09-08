@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+import re
 
 from sentence_transformers import SentenceTransformer
 
