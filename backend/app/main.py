@@ -12,6 +12,7 @@ from app.models.summary import Summary
 from app.models.doctor import Doctor
 from app.models.consent import Consent
 
+from app.api.tts import router as tts_router
 from app.api.patients import router as patients_router
 from app.api.sessions import router as sessions_router
 from app.api.documents import router as documents_router
@@ -60,6 +61,7 @@ app.include_router(doctors_router)
 app.include_router(consent_router)
 app.include_router(asr_router)
 app.include_router(conversation_router)
+app.include_router(tts_router)
 
 
 @app.get("/")

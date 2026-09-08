@@ -21,7 +21,10 @@ export default function Welcome() {
   return (
     <main className="welcome">
       <section className="welcome__hero">
-        <div className="welcome__pulse" aria-hidden="true">
+        <div
+          className="welcome__pulse"
+          aria-hidden="true"
+        >
           <svg
             viewBox="0 0 600 90"
             preserveAspectRatio="none"
@@ -56,22 +59,34 @@ export default function Welcome() {
         </div>
 
         <p className="welcome__eyebrow">
-          {translate(language, "welcome.eyebrow")}
+          {translate(
+            language,
+            "welcome.eyebrow"
+          )}
         </p>
 
         <h1>
-          {translate(language, "welcome.title")}
+          {translate(
+            language,
+            "welcome.title"
+          )}
         </h1>
 
         <p className="welcome__description">
-          {translate(language, "welcome.description")}
+          {translate(
+            language,
+            "welcome.description"
+          )}
         </p>
       </section>
 
       <section className="welcome__panel">
         <div className="welcome__panel-header">
           <h2>
-            {translate(language, "welcome.chooseLanguage")}
+            {translate(
+              language,
+              "welcome.chooseLanguage"
+            )}
           </h2>
 
           <p className="welcome__hint">
@@ -91,10 +106,6 @@ export default function Welcome() {
               <span className="welcome__lang-native">
                 {item.nativeName}
               </span>
-
-              <span className="welcome__lang-sub">
-                {item.name}
-              </span>
             </button>
           ))}
         </div>
@@ -103,7 +114,10 @@ export default function Welcome() {
           type="button"
           className="welcome__assist"
         >
-          {translate(language, "welcome.needHelp")}
+          {translate(
+            language,
+            "welcome.needHelp"
+          )}
         </button>
       </section>
     </main>

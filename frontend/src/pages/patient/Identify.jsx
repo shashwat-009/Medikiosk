@@ -6,6 +6,7 @@ import { translate } from "../../i18n";
 import { createPatient } from "../../services/patientService";
 import { createSession } from "../../services/sessionService";
 import VoiceButton from "../../components/kiosk/VoiceButton";
+import { speakText } from "../../services/ttsService";
 
 import "./Identify.css";
 

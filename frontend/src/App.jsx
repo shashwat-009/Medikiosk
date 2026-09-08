@@ -4,6 +4,8 @@ import { KioskProvider } from "./context/KioskContext";
 
 import KioskShell from "./components/kiosk/KioskShell";
 
+import KioskTTS from "./components/kiosk/KioskTTS";
+
 // Patient pages
 import Welcome from "./pages/patient/Welcome";
 import Identify from "./pages/patient/Identify";
@@ -28,6 +30,7 @@ import EditSummary from "./pages/doctor/EditSummary";
 function KioskLayout() {
   return (
     <KioskShell>
+      <KioskTTS />
       <Outlet />
     </KioskShell>
   );
