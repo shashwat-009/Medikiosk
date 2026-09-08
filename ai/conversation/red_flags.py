@@ -248,6 +248,84 @@ RED_FLAG_PATTERNS: dict[str, tuple[str, ...]] = {
     # ==================================================================
     # SUDDEN WEAKNESS / PARALYSIS
     # ==================================================================
+    # ==================================================================
+    # GASTROINTESTINAL BLEEDING
+    # ==================================================================
+    "gastrointestinal_bleeding": (
+        # English
+        "blood in my stool",
+        "blood in my stools",
+        "blood in my poop",
+        "blood in my bowel movement",
+        "blood in my bowel movements",
+        "passing blood in stool",
+        "passing blood with stool",
+        "blood mixed with stool",
+        "blood mixed with my stool",
+        "bloody stool",
+        "bloody stools",
+        "black tarry stool",
+        "black tarry stools",
+        "vomiting blood",
+        "throwing up blood",
+        "vomit blood",
+        "blood in vomit",
+        "vomiting coffee ground material",
+
+        # Hinglish / Roman Hindi
+        "stool mein khoon",
+        "stool me khoon",
+        "potty mein khoon",
+        "potty me khoon",
+        "mal mein khoon",
+        "mal me khoon",
+        "paikhane mein khoon",
+        "paikhane me khoon",
+        "mal ke saath khoon",
+        "stool ke saath khoon",
+        "potty ke saath khoon",
+        "khoon wala stool",
+        "khooni stool",
+        "kaala stool",
+        "kala stool",
+        "kaali potty",
+        "kali potty",
+        "khoon ki ulti",
+        "ulti mein khoon",
+        "ulti me khoon",
+
+        # Hindi - Devanagari
+        "मल में खून",
+        "मल में रक्त",
+        "मल के साथ खून",
+        "पाखाने में खून",
+        "पाखाने के साथ खून",
+        "पॉटी में खून",
+        "पॉटी के साथ खून",
+        "खूनी मल",
+        "खून की उल्टी",
+        "उल्टी में खून",
+        "काला मल",
+        "काली पॉटी",
+
+        # Bengali
+        "পায়খানায় রক্ত",
+        "পায়খানার সঙ্গে রক্ত",
+        "মলের সঙ্গে রক্ত",
+        "মলের মধ্যে রক্ত",
+        "পায়খানায় রক্তপাত",
+        "রক্ত বমি",
+
+        # Marathi
+        "शौचात रक्त",
+        "शौचामध्ये रक्त",
+        "मलात रक्त",
+        "मलामध्ये रक्त",
+        "शौचासोबत रक्त",
+        "रक्ताची उलटी",
+        "उलटीत रक्त",
+    ),
+
     "sudden_weakness_or_paralysis": (
         # English
         "sudden weakness",
@@ -311,6 +389,7 @@ RED_FLAG_PRIORITIES: dict[str, RedFlagPriority] = {
     "severe_chest_pain": RedFlagPriority.CRITICAL,
     "severe_bleeding": RedFlagPriority.CRITICAL,
     "sudden_weakness_or_paralysis": RedFlagPriority.CRITICAL,
+    "gastrointestinal_bleeding": RedFlagPriority.CRITICAL,
 }
 
 
@@ -348,57 +427,157 @@ def _contains_phrase(text: str, phrase: str) -> bool:
 def _is_negated_or_contextual(
     text: str,
     phrase: str,
+    phrase_index: int | None = None,
 ) -> bool:
     """
-    Reject obvious negation and third-person/contextual references.
+    Reject an occurrence when the patient clearly denies it or the
+    occurrence belongs to another person / a story or movie.
+
+    This is occurrence-aware: if a sentence contains both a third-person
+    example and a genuine first-person symptom, the genuine occurrence
+    can still be detected.
     """
 
     normalized_text = _normalize(text)
     normalized_phrase = _normalize(phrase)
 
-    phrase_index = normalized_text.find(
-        normalized_phrase
-    )
+    if phrase_index is None:
+        phrase_index = normalized_text.find(normalized_phrase)
 
     if phrase_index < 0:
         return False
 
     before = normalized_text[:phrase_index].strip()
+    context = before[-180:]
 
+    # If a relationship reference appears before this occurrence but the
+    # patient subsequently switches to a first-person statement, do not
+    # discard the patient's occurrence.
+    relationship_patterns = (
+        r"\bmy brother\b",
+        r"\bmy sister\b",
+        r"\bmy father\b",
+        r"\bmy mother\b",
+        r"\bmy friend\b",
+        r"\bmy husband\b",
+        r"\bmy wife\b",
+        r"\bmy son\b",
+        r"\bmy daughter\b",
+        r"\bmy child\b",
+        r"\bmy relative\b",
+        r"\bmy bhai\b",
+        r"\bmy behen\b",
+        r"\bmere bhai\b",
+        r"\bmeri behen\b",
+        r"\bmere papa\b",
+        r"\bmeri maa\b",
+        r"\bmere dost\b",
+        r"\bmera beta\b",
+        r"\bmeri beti\b",
+    )
+    first_person_patterns = (
+        r"\bi\b",
+        r"\bme\b",
+        r"\bmujhe\b",
+        r"\bmain\b",
+        r"\bमैं\b",
+        r"\bमुझे\b",
+        r"\bमी\b",
+        r"\bमला\b",
+        r"\bআমি\b",
+        r"\bআমার\b",
+    )
+
+    for relationship_pattern in relationship_patterns:
+        relationship_match = re.search(relationship_pattern, before)
+        if relationship_match:
+            after_relationship = before[relationship_match.end():]
+            if any(
+                re.search(pattern, after_relationship)
+                for pattern in first_person_patterns
+            ):
+                context = ""
+
+    # Explicit symptom denial. Do not use a blanket "not" rule because
+    # "I am not able to breathe" is itself a positive emergency statement.
     negation_patterns = (
-        r"\bdid not\s*$",
-        r"\bdidn't\s*$",
-        r"\bdo not\s*$",
-        r"\bdon't\s*$",
-        r"\bdoes not\s*$",
-        r"\bdoesn't\s*$",
-        r"\bnot\s*$",
+        r"\bdid not have\s*$",
+        r"\bdidn't have\s*$",
+        r"\bdo not have\s*$",
+        r"\bdon't have\s*$",
+        r"\bdoes not have\s*$",
+        r"\bdoesn't have\s*$",
+        r"\bdid not experience\s*$",
+        r"\bdidn't experience\s*$",
+        r"\bdo not experience\s*$",
+        r"\bdon't experience\s*$",
+        r"\bdoes not experience\s*$",
+        r"\bdoesn't experience\s*$",
+        r"\bnot experiencing\s*$",
+        r"\bnot having\s*$",
+        r"\bwithout\s*$",
         r"\bno\s*$",
         r"\bnever\s*$",
         r"\bnahi\s*$",
         r"\bnahin\s*$",
     )
 
-    for pattern in negation_patterns:
-        if re.search(pattern, before):
-            return True
+    if any(re.search(pattern, before) for pattern in negation_patterns):
+        return True
 
-    context = before[-150:]
-
+    # Third-person / narrative context.
     contextual_patterns = (
         r"\bsomeone\b",
         r"\bsomebody\b",
         r"\ba person\b",
         r"\banother person\b",
+        r"\bmy brother\b",
+        r"\bmy sister\b",
+        r"\bmy father\b",
+        r"\bmy mother\b",
+        r"\bmy friend\b",
+        r"\bmy husband\b",
+        r"\bmy wife\b",
+        r"\bmy son\b",
+        r"\bmy daughter\b",
+        r"\bmy child\b",
+        r"\bmy relative\b",
+        r"\bmy bhai\b",
+        r"\bmy behen\b",
+        r"\bmere bhai\b",
+        r"\bmeri behen\b",
+        r"\bmere papa\b",
+        r"\bmeri maa\b",
+        r"\bmere dost\b",
+        r"\bmera beta\b",
+        r"\bmeri beti\b",
         r"\bin a movie\b",
         r"\bin the movie\b",
         r"\bmovie about\b",
+        r"\bwatched a movie\b",
+        r"\bwatching a movie\b",
+        r"\bstory about\b",
+        r"\bstory of\b",
+        r"\bin a story\b",
     )
 
-    return any(
-        re.search(pattern, context)
-        for pattern in contextual_patterns
-    )
+    return any(re.search(pattern, context) for pattern in contextual_patterns)
+
+
+def _iter_phrase_occurrences(text: str, phrase: str):
+    """Yield every occurrence of a phrase so contextual first matches do not hide later patient matches."""
+    normalized_text = _normalize(text)
+    normalized_phrase = _normalize(phrase)
+    if not normalized_phrase:
+        return
+
+    start = 0
+    while True:
+        index = normalized_text.find(normalized_phrase, start)
+        if index < 0:
+            break
+        yield index
+        start = index + max(len(normalized_phrase), 1)
 
 
 def _looks_like_semantic_negation(text: str) -> bool:
@@ -437,6 +616,13 @@ def _looks_like_semantic_negation(text: str) -> bool:
         r"\bwithout any\b",
         r"\bthere is no\b",
         r"\bthere are no\b",
+        r"\bno\s+(?:blood|bleeding|chest pain|pain|weakness|numbness)\b",
+        r"\bnahi hai\b",
+        r"\bnahi ho raha\b",
+        r"\bnahi ho rahi\b",
+        r"\bnahin hai\b",
+        r"\bnahin ho raha\b",
+        r"\bnahin ho rahi\b",
     )
 
     return any(
@@ -565,45 +751,36 @@ class RedFlagDetector:
 
             for phrase in patterns:
 
-                if not _contains_phrase(
+                for phrase_index in _iter_phrase_occurrences(
                     normalized_text,
                     phrase,
                 ):
-                    continue
+                    if _is_negated_or_contextual(
+                        normalized_text,
+                        phrase,
+                        phrase_index=phrase_index,
+                    ):
+                        continue
 
-                if _is_negated_or_contextual(
-                    normalized_text,
-                    phrase,
-                ):
-                    continue
-
-                return self._detected_flag(
-                    flag_id=flag_id,
-                    matched_phrase=phrase,
-                    matched_text=text,
-                    detection_method="rule",
-                )
+                    return self._detected_flag(
+                        flag_id=flag_id,
+                        matched_phrase=phrase,
+                        matched_text=text,
+                        detection_method="rule",
+                    )
 
         # ==============================================================
-        # LAYER 2 — SEMANTIC DETECTION
-        # ==============================================================
-
-               # ==============================================================
         # LAYER 2 — SEMANTIC DETECTION
         # ==============================================================
 
         if self.use_semantic:
+            # Context/ownership is handled here rather than simply
+            # discarding every answer that mentions another person.
+            # The semantic detector itself is category-aware; this guard
+            # only blocks obvious narrative/third-person answers.
+            normalized_lower = normalized_text.casefold()
 
-            # ----------------------------------------------------------
-            # Do not run semantic detection on obvious third-person,
-            # movie/story, or other contextual descriptions.
-            #
-            # The deterministic layer already protects these cases
-            # for exact phrases. The semantic layer must respect the
-            # same safety boundary.
-            # ----------------------------------------------------------
-
-            semantic_context_patterns = (
+            narrative_context_patterns = (
                 r"\bsomeone\b",
                 r"\bsomebody\b",
                 r"\ba person\b",
@@ -613,71 +790,83 @@ class RedFlagDetector:
                 r"\bmovie about\b",
                 r"\bwatched a movie\b",
                 r"\bwatching a movie\b",
+                r"\bstory about\b",
+                r"\bstory of\b",
+                r"\bin a story\b",
             )
 
-            is_contextual_description = any(
-                re.search(
-                    pattern,
-                    normalized_text,
-                )
-                for pattern in semantic_context_patterns
+            relationship_context_patterns = (
+                r"\bmy brother\b",
+                r"\bmy sister\b",
+                r"\bmy father\b",
+                r"\bmy mother\b",
+                r"\bmy friend\b",
+                r"\bmy husband\b",
+                r"\bmy wife\b",
+                r"\bmy son\b",
+                r"\bmy daughter\b",
+                r"\bmy child\b",
+                r"\bmy relative\b",
+                r"\bmy bhai\b",
+                r"\bmy behen\b",
+                r"\bmere bhai\b",
+                r"\bmeri behen\b",
+                r"\bmere papa\b",
+                r"\bmeri maa\b",
+                r"\bmere dost\b",
+                r"\bmera beta\b",
+                r"\bmeri beti\b",
             )
 
-            # ----------------------------------------------------------
-            # Avoid obvious English symptom-denial constructions.
-            #
-            # We intentionally do not apply this blindly to Hindi/
-            # Hinglish because constructions such as:
-            #
-            #     "saans nahi aa rahi"
-            #
-            # are positive emergency statements.
-            # ----------------------------------------------------------
-
-            is_semantic_negation = (
-                _looks_like_semantic_negation(
-                    normalized_text
-                )
+            is_narrative_description = any(
+                re.search(pattern, normalized_lower)
+                for pattern in narrative_context_patterns
             )
 
-            if (
-                not is_contextual_description
-                and not is_semantic_negation
-            ):
+            has_relationship_context = any(
+                re.search(pattern, normalized_lower)
+                for pattern in relationship_context_patterns
+            )
 
-                semantic_detector = (
-                    self._get_semantic_detector()
-                )
+            # A relationship mention alone must not suppress a genuine
+            # first-person symptom:
+            # "My brother fainted, but I have severe chest pain."
+            first_person_markers = (
+                r"\bi\b",
+                r"\bme\b",
+                r"\bmyself\b",
+                r"\bmujhe\b",
+                r"\bmain\b",
+                r"\bमैं\b",
+                r"\bमुझे\b",
+                r"\bमी\b",
+                r"\bमला\b",
+                r"\bআমার\b",
+                r"\bআমি\b",
+            )
+            has_first_person = any(
+                re.search(pattern, normalized_lower)
+                for pattern in first_person_markers
+            )
+
+            is_contextual_description = (
+                is_narrative_description
+                or (has_relationship_context and not has_first_person)
+            )
+
+            is_semantic_negation = _looks_like_semantic_negation(
+                normalized_lower
+            )
+
+            if not is_contextual_description and not is_semantic_negation:
+                semantic_detector = self._get_semantic_detector()
 
                 if semantic_detector is not None:
-
-                    semantic_result = (
-                        semantic_detector.detect(
-                            normalized_text
-                        )
+                    semantic_result = semantic_detector.detect(
+                        normalized_text
                     )
 
                     if semantic_result.detected:
-
-                        return self._detected_semantic_flag(
-                            semantic_result=semantic_result,
-                            matched_text=text,
-                        )
-
-                semantic_detector = (
-                    self._get_semantic_detector()
-                )
-
-                if semantic_detector is not None:
-
-                    semantic_result = (
-                        semantic_detector.detect(
-                            normalized_text
-                        )
-                    )
-
-                    if semantic_result.detected:
-
                         return self._detected_semantic_flag(
                             semantic_result=semantic_result,
                             matched_text=text,
