@@ -19,6 +19,7 @@ export default function SessionReview() {
   const [isSaving, setIsSaving] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [editedContent, setEditedContent] = useState("");
+  const [editorContent, setEditorContent] = useState(null);
   const [actionError, setActionError] = useState("");
 
 
@@ -49,6 +50,19 @@ export default function SessionReview() {
 
       if (data?.summary?.content) {
         setEditedContent(data.summary.content);
+
+        try {
+          setEditorContent(
+            JSON.parse(data.summary.content)
+          );
+        } catch (err) {
+          console.error(
+            "Unable to prepare summary editor:",
+            err
+          );
+
+          setEditorContent(null);
+        }
       }
 
     } catch (err) {
@@ -59,7 +73,7 @@ export default function SessionReview() {
 
       setError(
         err.message ||
-          "Unable to load this patient session."
+        "Unable to load this patient session."
       );
 
     } finally {
@@ -95,6 +109,79 @@ export default function SessionReview() {
 
 
   // ============================================================
+  // Red-flag presentation helpers
+  // ============================================================
+
+  const redFlags = useMemo(() => {
+    const rawFlags = sections?.red_flags;
+
+    if (!Array.isArray(rawFlags)) {
+      return [];
+    }
+
+    const grouped = new Map();
+
+    rawFlags.forEach((flag) => {
+      if (!flag || typeof flag !== "object") {
+        return;
+      }
+
+      const category =
+        flag.category ||
+        flag.flag_id ||
+        "Clinical safety finding";
+
+      const priority =
+        flag.priority ||
+        "critical";
+
+      const existing = grouped.get(category);
+
+      const evidence = Array.isArray(flag.evidence)
+        ? flag.evidence
+          .filter(Boolean)
+          .map((item) => ({
+            question: item?.question || "",
+            text: item?.text || item?.matched_text || "",
+          }))
+          .filter((item) => item.text || item.question)
+        : [
+          {
+            question: flag.question || "",
+            text:
+              flag.matched_text ||
+              flag.answer ||
+              "",
+          },
+        ].filter((item) => item.text || item.question);
+
+      if (!existing) {
+        grouped.set(category, {
+          category,
+          priority,
+          evidence,
+        });
+        return;
+      }
+
+      evidence.forEach((item) => {
+        const alreadyExists = existing.evidence.some(
+          (existingItem) =>
+            existingItem.text === item.text &&
+            existingItem.question === item.question
+        );
+
+        if (!alreadyExists) {
+          existing.evidence.push(item);
+        }
+      });
+    });
+
+    return Array.from(grouped.values());
+  }, [sections?.red_flags]);
+
+
+  // ============================================================
   // Formatting helpers
   // ============================================================
 
@@ -108,10 +195,7 @@ export default function SessionReview() {
 
 
   function formatValue(value) {
-    if (
-      value === null ||
-      value === undefined
-    ) {
+    if (value === null || value === undefined) {
       return "Not available";
     }
 
@@ -126,32 +210,30 @@ export default function SessionReview() {
 
       return value
         .map((item) => {
-          if (
-            typeof item === "object" &&
-            item !== null
-          ) {
-            if (
-              item.answer !== undefined
-            ) {
-              return item.answer;
+          if (typeof item === "object" && item !== null) {
+            if (item.answer !== undefined) {
+              return formatValue(item.answer);
             }
 
-            if (
-              item.value !== undefined
-            ) {
+            if (item.value !== undefined) {
               return formatValue(item.value);
             }
 
-            return JSON.stringify(item);
+            return Object.entries(item)
+              .filter(([key]) => !isDoctorIrrelevantField(key))
+              .map(([key, child]) => `${formatLabel(key)}: ${formatValue(child)}`)
+              .join("\n");
           }
 
           return String(item);
         })
+        .filter(Boolean)
         .join("\n");
     }
 
     if (typeof value === "object") {
       return Object.entries(value)
+        .filter(([key]) => !isDoctorIrrelevantField(key))
         .map(
           ([key, item]) =>
             `${formatLabel(key)}: ${formatValue(item)}`
@@ -163,96 +245,872 @@ export default function SessionReview() {
   }
 
 
+  function isDoctorIrrelevantField(key) {
+    return [
+      "input_type",
+      "inputType",
+      "language",
+      "lang",
+      "response_id",
+      "responseId",
+      "matched_pattern",
+      "matched_text",
+      "matched_fields",
+      "explanation",
+      "flag_id",
+    ].includes(key);
+  }
+
+
+
+  // ============================================================
+  // Medical document presentation helpers
+  // ============================================================
+
+  const documentFindings = useMemo(() => {
+    const raw = Array.isArray(sections.document_derived_findings)
+      ? sections.document_derived_findings
+      : [];
+
+    const provenance = Array.isArray(
+      summaryContent?.provenance?.document_derived_findings
+    )
+      ? summaryContent.provenance.document_derived_findings
+      : [];
+
+    const groups = {
+      diagnoses: [],
+      labs: [],
+      medications: [],
+      allergies: [],
+      procedures: [],
+      findings: [],
+    };
+
+    const normalizeField = (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[-\s]+/g, "_");
+
+    const ignoredFields = new Set([
+      "document_type",
+      "document_id",
+      "filename",
+      "file_name",
+      "patient",
+      "patient_name",
+      "patient_id",
+      "hospital_id",
+      "age",
+      "sex",
+      "gender",
+      "source",
+      "provenance",
+      "confidence",
+      "raw_text",
+      "ocr_text",
+      "text",
+      "processing_status",
+      "dates",
+    ]);
+
+    const classify = (field, value) => {
+      const normalized = normalizeField(field);
+
+      if (
+        [
+          "diagnosis",
+          "diagnoses",
+          "condition",
+          "conditions",
+        ].includes(normalized)
+      ) {
+        return "diagnoses";
+      }
+
+      if (
+        [
+          "lab",
+          "labs",
+          "laboratory_result",
+          "laboratory_results",
+          "lab_result",
+          "lab_results",
+          "test",
+          "tests",
+          "test_result",
+          "test_results",
+          "investigation",
+          "investigations",
+        ].includes(normalized)
+      ) {
+        return "labs";
+      }
+
+      if (
+        [
+          "medication",
+          "medications",
+          "medicine",
+          "medicines",
+          "drug",
+          "drugs",
+          "prescription",
+          "prescriptions",
+          "drug_information",
+        ].includes(normalized)
+      ) {
+        return "medications";
+      }
+
+      if (["allergy", "allergies"].includes(normalized)) {
+        return "allergies";
+      }
+
+      if (
+        [
+          "procedure",
+          "procedures",
+          "surgery",
+          "surgeries",
+        ].includes(normalized)
+      ) {
+        return "procedures";
+      }
+
+      // Discharge extraction can contain clinically useful findings, but
+      // document dates/metadata are intentionally not shown here.
+      if (
+        [
+          "discharge_findings",
+          "discharge_extraction",
+          "clinical_finding",
+          "clinical_findings",
+          "finding",
+          "findings",
+        ].includes(normalized)
+      ) {
+        return "findings";
+      }
+
+      if (normalized && !ignoredFields.has(normalized)) {
+        return "findings";
+      }
+
+      // When provenance is unavailable (older summaries), infer from shape.
+      if (value && typeof value === "object") {
+        const keys = Object.keys(value).map(normalizeField);
+
+        if (keys.includes("name") && keys.some((key) =>
+          ["dosage", "dose", "frequency", "duration", "route"].includes(key)
+        )) {
+          return "medications";
+        }
+
+        if (
+          keys.includes("reference_range") ||
+          keys.includes("unit") ||
+          keys.includes("abnormal") ||
+          keys.includes("risk_flag")
+        ) {
+          return "labs";
+        }
+      }
+
+      return null;
+    };
+
+    const stableKey = (value) => {
+      if (value === null || value === undefined) return "null";
+      if (typeof value === "string") return value.trim().replace(/\s+/g, " ").toLowerCase();
+      if (typeof value !== "object") return String(value);
+
+      if (Array.isArray(value)) {
+        return `[${value.map(stableKey).sort().join("|")}]`;
+      }
+
+      return Object.keys(value)
+        .filter((key) => !ignoredFields.has(normalizeField(key)))
+        .sort()
+        .map((key) => `${normalizeField(key)}=${stableKey(value[key])}`)
+        .join("|");
+    };
+
+    const pushUnique = (target, value) => {
+      if (value === null || value === undefined || value === "") return;
+
+      const signature = stableKey(value);
+
+      if (
+        !target.some(
+          (entry) => entry.signature === signature
+        )
+      ) {
+        target.push({
+          value,
+          signature,
+        });
+      }
+    };
+
+    raw.forEach((rawItem, index) => {
+      if (rawItem === null || rawItem === undefined) return;
+
+      const source = provenance[index] || {};
+      const provenanceField = normalizeField(source.path);
+      const explicitField = normalizeField(
+        rawItem?.field || rawItem?.type
+      );
+      const value =
+        rawItem?.value !== undefined
+          ? rawItem.value
+          : rawItem;
+
+      const kind = classify(
+        explicitField || provenanceField,
+        value
+      );
+
+      if (!kind) return;
+
+      if (Array.isArray(value)) {
+        value.forEach((item) => pushUnique(groups[kind], item));
+      } else {
+        pushUnique(groups[kind], value);
+      }
+    });
+
+    return {
+      diagnoses: groups.diagnoses.map((entry) => entry.value),
+      labs: groups.labs.map((entry) => entry.value),
+      medications: groups.medications.map((entry) => entry.value),
+      allergies: groups.allergies.map((entry) => entry.value),
+      procedures: groups.procedures.map((entry) => entry.value),
+      findings: groups.findings.map((entry) => entry.value),
+    };
+  }, [
+    sections.document_derived_findings,
+    summaryContent?.provenance?.document_derived_findings,
+  ]);
+
+  const documentFindingCount =
+    documentFindings.diagnoses.length +
+    documentFindings.labs.length +
+    documentFindings.medications.length +
+    documentFindings.allergies.length +
+    documentFindings.procedures.length +
+    documentFindings.findings.length;
+
+  const interviewHighlights = useMemo(() => {
+    const responses = Array.isArray(review?.responses) ? review.responses : [];
+    const emptyAnswers = new Set([
+      "", "no", "none", "nothing", "not applicable", "n/a",
+      "na", "not available", "nil", "negative",
+    ]);
+
+    return responses
+      .map((response, index) => ({
+        id: response?.id || index,
+        question: String(response?.question || `Question ${index + 1}`).trim(),
+        answer: String(response?.answer || "").trim(),
+      }))
+      .filter(({ answer }) => answer && !emptyAnswers.has(answer.toLowerCase()))
+      .slice(0, 8);
+  }, [review?.responses]);
+
+  function displayDocumentValue(value) {
+    if (value === null || value === undefined || value === "") {
+      return "Not available";
+    }
+
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      return String(value);
+    }
+
+    if (Array.isArray(value)) {
+      return value
+        .map(displayDocumentValue)
+        .filter(Boolean)
+        .join(" • ");
+    }
+
+    return Object.entries(value)
+      .filter(
+        ([key]) =>
+          !isDoctorIrrelevantField(key) &&
+          ![
+            "document_id",
+            "filename",
+            "file_name",
+            "provenance",
+            "confidence",
+          ].includes(key)
+      )
+      .map(
+        ([key, item]) =>
+          `${formatLabel(key)}: ${displayDocumentValue(item)}`
+      )
+      .join("\n");
+  }
+
+  function renderDocumentDataCard(title, items, kind) {
+    if (!items?.length) return null;
+
+    const normalizeKey = (key) => String(key || "").toLowerCase().replace(/[-\s]/g, "_");
+    const get = (item, ...keys) => {
+      if (!item || typeof item !== "object") return null;
+      for (const key of keys) {
+        const found = Object.entries(item).find(([entryKey]) => normalizeKey(entryKey) === normalizeKey(key));
+        if (found && found[1] !== null && found[1] !== undefined && String(found[1]).trim() !== "") return found[1];
+      }
+      return null;
+    };
+
+    const isLab = kind === "labs";
+    const isMedication = kind === "medications";
+
+    return (
+      <div className={`doctor-document-data-group doctor-document-data-group--${kind}`}>
+        <div className="doctor-document-data-group__title">
+          <span>{title}</span>
+          <small>{items.length} {items.length === 1 ? "record" : "records"}</small>
+        </div>
+
+        {isLab ? (
+          <div className="doctor-clinical-table-wrap">
+            <table className="doctor-clinical-table">
+              <thead>
+                <tr><th>Test</th><th>Result</th><th>Reference range</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {items.map((item, index) => {
+                  const name = get(item, "name", "test_name", "test") || "Laboratory test";
+                  const value = get(item, "value", "result", "result_value");
+                  const unit = get(item, "unit", "units");
+                  const range = get(item, "reference_range", "referenceRange");
+                  const status = get(item, "status") || (String(get(item, "abnormal")).toLowerCase() === "true" ? "abnormal" : "");
+                  const risk = get(item, "risk_flag", "riskFlag");
+                  const statusText = risk && String(risk).toLowerCase() !== "not available" ? formatLabel(risk) : status ? formatLabel(status) : "—";
+                  const statusClass = String(status || risk || "").toLowerCase().includes("high") || String(status || risk || "").toLowerCase().includes("low") || String(status || risk || "").toLowerCase().includes("abnormal") || String(status || risk || "").toLowerCase().includes("review") ? "doctor-table-status--alert" : "doctor-table-status--normal";
+                  return (
+                    <tr key={index}>
+                      <td><strong>{displayDocumentValue(name)}</strong></td>
+                      <td><strong>{displayDocumentValue(value)}</strong>{unit && <span className="doctor-table-unit"> {displayDocumentValue(unit)}</span>}</td>
+                      <td>{displayDocumentValue(range) === "Not available" ? "—" : displayDocumentValue(range)}</td>
+                      <td><span className={`doctor-table-status ${statusClass}`}>{statusText}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : isMedication ? (
+          <div className="doctor-clinical-table-wrap">
+            <table className="doctor-clinical-table doctor-medication-table">
+              <thead>
+                <tr><th>Medicine</th><th>Dose</th><th>Route</th><th>Frequency</th><th>Duration</th></tr>
+              </thead>
+              <tbody>
+                {items.map((item, index) => {
+                  const name = get(item, "name", "medicine", "drug") || "Medication";
+                  const dosage = get(item, "dosage", "dose");
+                  const route = get(item, "route");
+                  const frequency = get(item, "frequency", "freq");
+                  const duration = get(item, "duration");
+                  return (
+                    <tr key={index}>
+                      <td><strong>{displayDocumentValue(name)}</strong></td>
+                      <td>{dosage ? displayDocumentValue(dosage) : "—"}</td>
+                      <td>{route ? displayDocumentValue(route) : "—"}</td>
+                      <td>{frequency ? displayDocumentValue(frequency) : "—"}</td>
+                      <td>{duration ? displayDocumentValue(duration) : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="doctor-document-compact-list">
+            {items.map((item, index) => (
+              <div className="doctor-document-compact-row" key={index}>
+                {typeof item === "object" && item !== null
+                  ? Object.entries(item)
+                    .filter(([key]) => !isDoctorIrrelevantField(key))
+                    .filter(([key]) => !["document_id", "filename", "file_name", "provenance", "confidence"].includes(normalizeKey(key)))
+                    .map(([key, value]) => <span key={key}><b>{formatLabel(key)}</b>{displayDocumentValue(value)}</span>)
+                  : <span>{displayDocumentValue(item)}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ============================================================
   // Render clinical section
   // ============================================================
 
+  function isLegacyOCRMetadataItem(item) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return false;
+    }
+
+    const field = String(
+      item.field || item.type || ""
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/[-\s]+/g, "_");
+
+    return (
+      [
+        "document_type",
+        "document_id",
+        "filename",
+        "file_name",
+        "patient",
+        "patient_name",
+        "patient_id",
+        "hospital_id",
+        "age",
+        "sex",
+        "gender",
+      ].includes(field) ||
+      item.document_id !== undefined ||
+      item.filename !== undefined ||
+      item.file_name !== undefined
+    );
+  }
+
+  function cleanLegacySection(section) {
+    if (!Array.isArray(section)) {
+      return section;
+    }
+
+    return section.filter(
+      (item) => !isLegacyOCRMetadataItem(item)
+    );
+  }
+
   function renderSection(title, section) {
+    const visibleSection = cleanLegacySection(section);
+    section = visibleSection;
+
     let hasContent = false;
 
     if (Array.isArray(section)) {
       hasContent = section.length > 0;
-    } else if (
-      section &&
-      typeof section === "object"
-    ) {
-      hasContent =
-        Object.keys(section).length > 0;
+    } else if (section && typeof section === "object") {
+      hasContent = Object.entries(section).some(
+        ([key, value]) =>
+          !isDoctorIrrelevantField(key) &&
+          value !== null &&
+          value !== undefined &&
+          (
+            !Array.isArray(value) ||
+            value.length > 0
+          )
+      );
+    } else if (section !== null && section !== undefined) {
+      hasContent = String(section).trim().length > 0;
+    }
+
+    if (!hasContent) {
+      return null;
     }
 
     return (
       <section
-        className="review-section"
+        className={`review-section review-section--${title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")}`}
         key={title}
+        style={{
+          background: "#ffffff",
+          border: "1px solid rgba(22, 96, 92, 0.12)",
+          borderRadius: "16px",
+          overflow: "hidden",
+          marginBottom: "14px",
+        }}
       >
-        <div className="review-section__header">
-          <h2>{title}</h2>
+        <div
+          className="review-section__header"
+          style={{
+            padding: "15px 20px",
+            borderBottom: hasContent ? "1px solid rgba(22, 96, 92, 0.10)" : "none",
+            background: "rgba(22, 96, 92, 0.025)",
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: "16px" }}>{title}</h2>
         </div>
 
         {hasContent ? (
-          <div className="review-section__content">
-
+          <div
+            className="review-section__content"
+            style={{ padding: "18px 20px" }}
+          >
             {Array.isArray(section) ? (
-              section.map((item, index) => (
-                <div
-                  className="review-item"
-                  key={index}
-                >
-                  {typeof item === "object" &&
-                  item !== null ? (
-                    <>
-                      {item.question && (
-                        <div className="review-item__question">
+              section.map((item, index) => {
+                if (item && typeof item === "object") {
+                  const visibleEntries = Object.entries(item).filter(
+                    ([key]) => !isDoctorIrrelevantField(key)
+                  );
+                  const question = item.question;
+                  const answer = item.answer;
+
+                  if (question || answer !== undefined) {
+                    return (
+                      <div
+                        className="review-item"
+                        key={index}
+                        style={{
+                          padding: "0 0 15px",
+                          marginBottom: index < section.length - 1 ? "15px" : 0,
+                          borderBottom:
+                            index < section.length - 1
+                              ? "1px solid rgba(22, 96, 92, 0.10)"
+                              : "none",
+                        }}
+                      >
+                        {question && (
+                          <div
+                            className="review-item__question"
+                            style={{
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              marginBottom: "6px",
+                              opacity: 0.68,
+                            }}
+                          >
+                            {question}
+                          </div>
+                        )}
+                        {answer !== undefined && (
+                          <div
+                            className="review-item__answer"
+                            style={{
+                              fontSize: "15px",
+                              lineHeight: 1.65,
+                              whiteSpace: "pre-wrap",
+                            }}
+                          >
+                            {formatValue(answer)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      className="review-item"
+                      key={index}
+                      style={{
+                        padding: "0 0 15px",
+                        marginBottom: index < section.length - 1 ? "15px" : 0,
+                        borderBottom:
+                          index < section.length - 1
+                            ? "1px solid rgba(22, 96, 92, 0.10)"
+                            : "none",
+                      }}
+                    >
+                      <div
+                        className="review-item__answer"
+                        style={{ fontSize: "15px", lineHeight: 1.65, whiteSpace: "pre-wrap" }}
+                      >
+                        {formatValue(item)}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    className="review-item"
+                    key={index}
+                    style={{
+                      fontSize: "15px",
+                      lineHeight: 1.65,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {formatValue(item)}
+                  </div>
+                );
+              })
+            ) : typeof section === "object" ? (
+              Object.entries(section)
+                .filter(([key]) => !isDoctorIrrelevantField(key))
+                .map(([key, value]) => (
+                  <div
+                    className="review-item"
+                    key={key}
+                    style={{
+                      padding: "0 0 15px",
+                      marginBottom: "15px",
+                      borderBottom: "1px solid rgba(22, 96, 92, 0.10)",
+                    }}
+                  >
+                    <div
+                      className="review-item__question"
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        marginBottom: "6px",
+                        opacity: 0.68,
+                      }}
+                    >
+                      {formatLabel(key)}
+                    </div>
+                    <div
+                      className="review-item__answer"
+                      style={{ fontSize: "15px", lineHeight: 1.65, whiteSpace: "pre-wrap" }}
+                    >
+                      {formatValue(value)}
+                    </div>
+                  </div>
+                ))
+            ) : (
+              <div
+                className="review-item__answer"
+                style={{ fontSize: "15px", lineHeight: 1.65, whiteSpace: "pre-wrap" }}
+              >
+                {formatValue(section)}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div
+            className="review-section__empty"
+            style={{ padding: "17px 20px", opacity: 0.55, fontSize: "14px" }}
+          >
+            No information recorded.
+          </div>
+        )}
+      </section>
+    );
+  }
+
+
+
+  // ============================================================
+  // Structured summary editor helpers
+  // ============================================================
+
+  function updateEditorValue(path, value) {
+    setEditorContent((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const updated = structuredClone(current);
+      let target = updated;
+
+      for (let i = 0; i < path.length - 1; i += 1) {
+        target = target[path[i]];
+      }
+
+      target[path[path.length - 1]] = value;
+
+      return updated;
+    });
+  }
+
+
+  function renderEditableValue(value, path, label) {
+    if (value === null || value === undefined) {
+      return (
+        <div className="doctor-editor-field" key={path.join(".")}>
+          <label>{label}</label>
+          <input
+            type="text"
+            value=""
+            placeholder="Not available"
+            onChange={(event) =>
+              updateEditorValue(path, event.target.value)
+            }
+          />
+        </div>
+      );
+    }
+
+    if (Array.isArray(value)) {
+      return (
+        <div className="doctor-editor-array" key={path.join(".")}>
+          <div className="doctor-editor-array__label">{label}</div>
+
+          {value.length === 0 ? (
+            <div className="doctor-editor-empty">
+              None recorded
+            </div>
+          ) : (
+            value.map((item, index) => {
+              if (item && typeof item === "object" && !Array.isArray(item)) {
+                const hasQuestionAnswer =
+                  item.question !== undefined ||
+                  item.answer !== undefined;
+
+                if (hasQuestionAnswer) {
+                  return (
+                    <div
+                      className="doctor-editor-array__item"
+                      key={`${path.join(".")}-${index}`}
+                      style={{
+                        padding: "16px",
+                        marginBottom: "10px",
+                        background: "rgba(22, 96, 92, 0.035)",
+                        border: "1px solid rgba(22, 96, 92, 0.10)",
+                        borderRadius: "12px",
+                      }}
+                    >
+                      {item.question !== undefined && (
+                        <div
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            lineHeight: 1.45,
+                            marginBottom: "8px",
+                            opacity: 0.68,
+                          }}
+                        >
                           {item.question}
                         </div>
                       )}
 
                       {item.answer !== undefined && (
-                        <div className="review-item__answer">
-                          {formatValue(item.answer)}
+                        <div className="doctor-editor-field">
+                          <label>Patient answer</label>
+                          <textarea
+                            value={String(item.answer ?? "")}
+                            rows={4}
+                            onChange={(event) =>
+                              updateEditorValue(
+                                [...path, index, "answer"],
+                                event.target.value
+                              )
+                            }
+                          />
                         </div>
                       )}
-
-                      {!item.question &&
-                        item.answer === undefined && (
-                          <div className="review-item__answer">
-                            {formatValue(item)}
-                          </div>
-                        )}
-                    </>
-                  ) : (
-                    <div className="review-item__answer">
-                      {formatValue(item)}
                     </div>
+                  );
+                }
+              }
+
+              return (
+                <div
+                  className="doctor-editor-array__item"
+                  key={`${path.join(".")}-${index}`}
+                >
+                  {renderEditableValue(
+                    item,
+                    [...path, index],
+                    `${label} ${index + 1}`
                   )}
                 </div>
-              ))
-            ) : (
-              Object.entries(section).map(
-                ([key, value]) => (
-                  <div
-                    className="review-item"
-                    key={key}
-                  >
-                    <div className="review-item__question">
-                      {formatLabel(key)}
-                    </div>
+              );
+            })
+          )}
+        </div>
+      );
+    }
 
-                    <div className="review-item__answer">
-                      {formatValue(value)}
-                    </div>
-                  </div>
-                )
+    if (typeof value === "object") {
+      const visibleEntries = Object.entries(value).filter(
+        ([key]) => !isDoctorIrrelevantField(key)
+      );
+
+      return (
+        <div
+          className="doctor-editor-object"
+          key={path.join(".")}
+        >
+          <div className="doctor-editor-object__title">
+            {label}
+          </div>
+
+          <div className="doctor-editor-object__body">
+            {visibleEntries.map(([key, childValue]) =>
+              renderEditableValue(
+                childValue,
+                [...path, key],
+                formatLabel(key)
               )
             )}
+          </div>
+        </div>
+      );
+    }
 
-          </div>
+    const stringValue = String(value);
+    const isLongText =
+      stringValue.length > 120 ||
+      stringValue.includes("\n");
+
+    return (
+      <div
+        className="doctor-editor-field"
+        key={path.join(".")}
+      >
+        <label>{label}</label>
+
+        {isLongText ? (
+          <textarea
+            value={stringValue}
+            rows={5}
+            onChange={(event) =>
+              updateEditorValue(path, event.target.value)
+            }
+          />
         ) : (
-          <div className="review-section__empty">
-            No information recorded.
-          </div>
+          <input
+            type="text"
+            value={stringValue}
+            onChange={(event) =>
+              updateEditorValue(path, event.target.value)
+            }
+          />
         )}
-      </section>
+      </div>
+    );
+  }
+
+
+
+  function renderEditableSection(
+    title,
+    section,
+    path
+  ) {
+    if (
+      section === null ||
+      section === undefined
+    ) {
+      return null;
+    }
+
+    return (
+      <div className="doctor-editor-section">
+        <div className="doctor-editor-section__title">
+          {title}
+        </div>
+
+        <div className="doctor-editor-section__body">
+          {renderEditableValue(
+            section,
+            path,
+            title
+          )}
+        </div>
+      </div>
     );
   }
 
@@ -286,7 +1144,19 @@ export default function SessionReview() {
         }
       );
 
-      await loadReview();
+      setReview((current) =>
+        current?.summary
+          ? {
+              ...current,
+              summary: {
+                ...current.summary,
+                status: "accepted",
+              },
+            }
+          : current
+      );
+
+      setShowEditor(false);
 
     } catch (err) {
       console.error(
@@ -296,7 +1166,7 @@ export default function SessionReview() {
 
       setActionError(
         err.message ||
-          "Failed to approve the summary."
+        "Failed to approve the summary."
       );
 
     } finally {
@@ -342,7 +1212,19 @@ export default function SessionReview() {
         }
       );
 
-      await loadReview();
+      setReview((current) =>
+        current?.summary
+          ? {
+              ...current,
+              summary: {
+                ...current.summary,
+                status: "rejected",
+              },
+            }
+          : current
+      );
+
+      setShowEditor(false);
 
     } catch (err) {
       console.error(
@@ -352,7 +1234,7 @@ export default function SessionReview() {
 
       setActionError(
         err.message ||
-          "Failed to reject the summary."
+        "Failed to reject the summary."
       );
 
     } finally {
@@ -366,16 +1248,36 @@ export default function SessionReview() {
   // ============================================================
 
   function startEditing() {
-    if (!review?.summary) {
+    if (!review?.summary?.content) {
       return;
     }
 
-    setEditedContent(
-      review.summary.content || ""
-    );
+    try {
+      const parsed = JSON.parse(
+        review.summary.content
+      );
 
-    setActionError("");
-    setShowEditor(true);
+      setEditedContent(
+        review.summary.content
+      );
+
+      setEditorContent(
+        structuredClone(parsed)
+      );
+
+      setActionError("");
+      setShowEditor(true);
+
+    } catch (err) {
+      console.error(
+        "Unable to open summary editor:",
+        err
+      );
+
+      setActionError(
+        "Unable to edit this summary."
+      );
+    }
   }
 
 
@@ -388,18 +1290,9 @@ export default function SessionReview() {
       return;
     }
 
-    if (!editedContent.trim()) {
+    if (!editorContent) {
       setActionError(
         "Summary cannot be empty."
-      );
-      return;
-    }
-
-    try {
-      JSON.parse(editedContent);
-    } catch {
-      setActionError(
-        "The edited summary must contain valid JSON."
       );
       return;
     }
@@ -408,6 +1301,9 @@ export default function SessionReview() {
     setActionError("");
 
     try {
+      const serializedContent =
+        JSON.stringify(editorContent);
+
       await api(
         `/summaries/${review.summary.id}`,
         {
@@ -416,10 +1312,13 @@ export default function SessionReview() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            content: editedContent.trim(),
-            status: "accepted",
+            content: serializedContent,
           }),
         }
+      );
+
+      setEditedContent(
+        serializedContent
       );
 
       setShowEditor(false);
@@ -434,7 +1333,7 @@ export default function SessionReview() {
 
       setActionError(
         err.message ||
-          "Failed to save the edited summary."
+        "Failed to save the edited summary."
       );
 
     } finally {
@@ -511,9 +1410,13 @@ export default function SessionReview() {
     review?.summary?.status || "draft";
 
   const verificationStatus =
-    summaryContent?.summary
-      ?.verification_status ||
-    "needs_review";
+    summaryStatus === "accepted"
+      ? "verified"
+      : summaryStatus === "rejected"
+        ? "rejected"
+        : summaryContent?.summary
+            ?.verification_status ||
+          "needs_review";
 
 
   // ============================================================
@@ -695,12 +1598,11 @@ export default function SessionReview() {
             </span>
 
             <span
-              className={`doctor-status doctor-status--${
-                verificationStatus ===
-                "verified"
+              className={`doctor-status doctor-status--${verificationStatus ===
+                  "verified"
                   ? "accepted"
                   : "warning"
-              }`}
+                }`}
             >
               {formatLabel(
                 verificationStatus
@@ -710,10 +1612,7 @@ export default function SessionReview() {
           </div>
 
 
-          {summaryContent
-            ?.summary
-            ?.red_flags
-            ?.length > 0 && (
+          {redFlags.length > 0 && (
 
             <div>
 
@@ -754,7 +1653,7 @@ export default function SessionReview() {
             <div>
 
               <p className="doctor-section-eyebrow">
-                AI-GENERATED DRAFT
+                CLINICAL SUMMARY
               </p>
 
               <h2>
@@ -762,16 +1661,27 @@ export default function SessionReview() {
               </h2>
 
               <p>
-                Review the generated history
-                before consultation.
+                Review the patient history and key clinical information before consultation.
               </p>
 
             </div>
 
 
-            {review?.summary && (
+            {review?.summary && summaryStatus === "draft" && (
               <span className="doctor-draft-badge">
                 Physician review required
+              </span>
+            )}
+
+            {summaryStatus === "accepted" && (
+              <span className="doctor-draft-badge">
+                Physician accepted
+              </span>
+            )}
+
+            {summaryStatus === "rejected" && (
+              <span className="doctor-draft-badge">
+                Summary rejected
               </span>
             )}
 
@@ -795,35 +1705,83 @@ export default function SessionReview() {
 
             </div>
 
+          ) : summaryStatus === "rejected" ? (
+
+            <div className="doctor-empty-state">
+
+              <h3>
+                Clinical summary rejected
+              </h3>
+
+              <p>
+                This AI-generated summary was rejected by the physician
+                and is no longer available for consultation.
+              </p>
+
+            </div>
+
           ) : showEditor ? (
 
             /* ==================================================
-               EDITOR
+               STRUCTURED EDITOR
                ================================================== */
 
-            <div className="doctor-editor">
+            <div
+              className="doctor-editor"
+              style={{
+                background: "#fbfdfd",
+                border: "1px solid rgba(22, 96, 92, 0.12)",
+                borderRadius: "16px",
+                overflow: "hidden",
+              }}
+            >
 
-              <label htmlFor="summary-editor">
-                Edit clinical summary
-              </label>
+              <div className="doctor-editor__heading">
 
-              <p className="doctor-editor__hint">
-                The summary is stored as structured
-                JSON. Make your corrections and save
-                when the information is clinically
-                accurate.
-              </p>
+                <div>
 
-              <textarea
-                id="summary-editor"
-                value={editedContent}
-                onChange={(event) =>
-                  setEditedContent(
-                    event.target.value
+                  <label>
+                    Edit clinical summary
+                  </label>
+
+                  <p className="doctor-editor__hint">
+                    Update only the clinical information that needs correction.
+                    Interview metadata such as language and input method is kept
+                    in the record but is not shown here. Saving changes does not
+                    accept the summary.
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <div className="doctor-editor__content">
+
+                {editorContent?.summary?.sections
+                  ? Object.entries(
+                    editorContent.summary.sections
                   )
-                }
-                rows={26}
-              />
+                    .filter(([key]) => key !== "red_flags")
+                    .map(([key, value]) =>
+                      renderEditableSection(
+                        formatLabel(key),
+                        value,
+                        [
+                          "summary",
+                          "sections",
+                          key,
+                        ]
+                      )
+                    )
+                  : (
+                    <div className="doctor-editor-empty">
+                      No editable clinical information
+                      is available.
+                    </div>
+                  )}
+
+              </div>
 
 
               <div className="doctor-editor__actions">
@@ -844,14 +1802,15 @@ export default function SessionReview() {
                 <button
                   type="button"
                   className="doctor-button doctor-button--primary"
-                  onClick={
-                    saveEditedSummary
+                  onClick={saveEditedSummary}
+                  disabled={
+                    isSaving ||
+                    !editorContent
                   }
-                  disabled={isSaving}
                 >
                   {isSaving
                     ? "Saving..."
-                    : "Save & Accept"}
+                    : "Save Changes"}
                 </button>
 
               </div>
@@ -907,11 +1866,6 @@ export default function SessionReview() {
               )}
 
               {renderSection(
-                "Document-Derived Findings",
-                sections.document_derived_findings
-              )}
-
-              {renderSection(
                 "Timeline",
                 sections.timeline
               )}
@@ -942,39 +1896,187 @@ export default function SessionReview() {
             RED FLAGS
             ==================================================== */}
 
-        {summaryContent
-          ?.summary
-          ?.red_flags
-          ?.length > 0 && (
+        {redFlags.length > 0 && (
 
-          <section className="doctor-alert-card">
+          <section
+            className="doctor-alert-card"
+            style={{
+              display: "flex",
+              gap: "18px",
+              alignItems: "flex-start",
+              padding: "22px 24px",
+            }}
+          >
 
-            <div className="doctor-alert-card__icon">
+            <div
+              className="doctor-alert-card__icon"
+              style={{
+                flex: "0 0 auto",
+                width: "42px",
+                height: "42px",
+                display: "grid",
+                placeItems: "center",
+                borderRadius: "50%",
+                fontSize: "20px",
+                fontWeight: 800,
+              }}
+            >
               !
             </div>
 
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
 
-              <h2>
-                Red Flags
-              </h2>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  marginBottom: "4px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div>
+                  <h2 style={{ margin: 0 }}>
+                    Red Flags
+                  </h2>
+                  <p
+                    style={{
+                      margin: "5px 0 0",
+                      opacity: 0.8,
+                    }}
+                  >
+                    Safety findings requiring physician attention.
+                  </p>
+                </div>
 
-              <p>
-                The system detected information
-                requiring physician attention.
-              </p>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: "999px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    whiteSpace: "nowrap",
+                    background: "rgba(180, 35, 35, 0.10)",
+                    border: "1px solid rgba(180, 35, 35, 0.20)",
+                  }}
+                >
+                  {redFlags.length} {redFlags.length === 1 ? "finding" : "findings"}
+                </span>
+              </div>
 
-              <ul>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "10px",
+                  marginTop: "16px",
+                }}
+              >
+                {redFlags.map((flag, index) => (
+                  <article
+                    key={`${flag.category}-${index}`}
+                    style={{
+                      background: "rgba(255, 255, 255, 0.78)",
+                      border: "1px solid rgba(180, 35, 35, 0.16)",
+                      borderRadius: "12px",
+                      padding: "14px 16px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "10px",
+                        flexWrap: "wrap",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      <strong
+                        style={{
+                          fontSize: "16px",
+                          lineHeight: 1.3,
+                        }}
+                      >
+                        {formatLabel(flag.category)}
+                      </strong>
 
-                {summaryContent.summary.red_flags.map(
-                  (flag, index) => (
-                    <li key={index}>
-                      {formatValue(flag)}
-                    </li>
-                  )
-                )}
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "4px 9px",
+                          borderRadius: "999px",
+                          fontSize: "11px",
+                          fontWeight: 800,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                          background: "rgba(180, 35, 35, 0.10)",
+                          border: "1px solid rgba(180, 35, 35, 0.16)",
+                        }}
+                      >
+                        {formatLabel(flag.priority)}
+                      </span>
+                    </div>
 
-              </ul>
+                    {flag.evidence.length > 0 ? (
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        {flag.evidence.map((evidence, evidenceIndex) => (
+                          <div
+                            key={evidenceIndex}
+                            style={{
+                              padding: "9px 11px",
+                              borderLeft: "3px solid rgba(180, 35, 35, 0.55)",
+                              background: "rgba(180, 35, 35, 0.045)",
+                              borderRadius: "0 8px 8px 0",
+                            }}
+                          >
+                            {evidence.question && (
+                              <div
+                                style={{
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  opacity: 0.72,
+                                  marginBottom: "3px",
+                                }}
+                              >
+                                {evidence.question}
+                              </div>
+                            )}
+
+                            {evidence.text && (
+                              <div
+                                style={{
+                                  fontSize: "14px",
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                “{evidence.text}”
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          fontSize: "13px",
+                          opacity: 0.7,
+                        }}
+                      >
+                        The system identified a safety finding, but no patient statement was recorded.
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
 
             </div>
 
@@ -984,93 +2086,156 @@ export default function SessionReview() {
 
 
         {/* ====================================================
+            PATIENT INTERVIEW HIGHLIGHTS
+            ==================================================== */}
+
+        {interviewHighlights.length > 0 && (
+          <section className="doctor-interview-highlights-card">
+            <div className="doctor-card-heading">
+              <div>
+                <p className="doctor-section-eyebrow">PATIENT INTERVIEW</p>
+                <h2>Patient-reported highlights</h2>
+                <p className="doctor-card-heading__description">
+                  Key answers stated directly by the patient during the kiosk interview.
+                </p>
+              </div>
+              <span>{interviewHighlights.length} responses</span>
+            </div>
+            <div className="doctor-interview-highlight-grid">
+              {interviewHighlights.map((item) => {
+                const isSafety = redFlags.some((flag) =>
+                  flag.evidence?.some((evidence) =>
+                    evidence.text && evidence.text.trim().toLowerCase() === item.answer.toLowerCase()
+                  )
+                );
+                return (
+                  <article key={item.id} className={`doctor-interview-highlight${isSafety ? " doctor-interview-highlight--alert" : ""}`}>
+                    <span className="doctor-interview-highlight__label">Patient answer</span>
+                    <strong>{item.question}</strong>
+                    <p>{item.answer}</p>
+                    {isSafety && <span className="doctor-interview-highlight__alert">Safety alert — physician attention required</span>}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+
+        {/* ====================================================
             DOCUMENTS
             ==================================================== */}
 
         <section className="doctor-documents-card">
-
           <div className="doctor-card-heading">
-
             <div>
-
-              <p className="doctor-section-eyebrow">
-                MODULE B
+              <p className="doctor-section-eyebrow">MODULE B</p>
+              <h2>Medical Documents</h2>
+              <p className="doctor-card-heading__description">
+                Uploaded records and the clinically relevant information extracted from them.
               </p>
-
-              <h2>
-                Medical Documents
-              </h2>
-
             </div>
-
             <span>
-              {review?.documents?.length || 0}{" "}
-              document(s)
+              {review?.documents?.length || 0} {review?.documents?.length === 1 ? "document" : "documents"}
             </span>
-
           </div>
 
-
           {review?.documents?.length ? (
-
-            <div className="doctor-documents-list">
-
-              {review.documents.map(
-                (document) => (
-
-                  <div
-                    className="doctor-document-row"
-                    key={document.id}
-                  >
-
-                    <div className="doctor-document-icon">
-                      DOC
+            <>
+              <div className="doctor-documents-content">
+                {review.documents.map((document) => (
+                  <article className="doctor-document-card" key={document.id}>
+                    <div className="doctor-document-card__identity">
+                      <div className="doctor-document-icon">DOC</div>
+                      <div>
+                        <strong>{document.filename || "Medical document"}</strong>
+                        <span>
+                          {document.document_type
+                            ? formatLabel(document.document_type)
+                            : "Medical document"}
+                        </span>
+                      </div>
                     </div>
-
-
-                    <div className="doctor-document-info">
-
-                      <strong>
-                        {document.filename ||
-                          "Medical document"}
-                      </strong>
-
-                      <span>
-                        {document.document_type ||
-                          "Medical document"}
-                      </span>
-
-                    </div>
-
 
                     <span
-                      className={`doctor-document-status doctor-document-status--${
-                        document.processing_status ||
-                        "unknown"
-                      }`}
+                      className={`doctor-document-status doctor-document-status--${document.processing_status || "unknown"
+                        }`}
                     >
-                      {formatLabel(
-                        document.processing_status ||
-                          "unknown"
-                      )}
+                      {formatLabel(document.processing_status || "unknown")}
                     </span>
+                  </article>
+                ))}
+              </div>
 
+              {documentFindingCount > 0 && (
+                <div className="doctor-extracted-clinical">
+                  <div className="doctor-extracted-clinical__heading">
+                    <div>
+                      <p className="doctor-section-eyebrow">DOCUMENT EXTRACTION</p>
+                      <h3>Clinically Relevant Findings</h3>
+                      <p>
+                        Only information extracted from the uploaded record is shown here.
+                        Document IDs, patient metadata and OCR bookkeeping are hidden.
+                      </p>
+                    </div>
+                    <span>
+                      {documentFindingCount} clinical{" "}
+                      {documentFindingCount === 1 ? "finding" : "findings"}
+                    </span>
                   </div>
 
-                )
+                  <div className="doctor-document-source-strip">
+                    <span>Sources</span>
+                    {review.documents.map((document) => (
+                      <span
+                        className="doctor-document-source-chip"
+                        key={document.id}
+                      >
+                        {document.filename || "Medical document"}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="doctor-document-findings-grid">
+                    {renderDocumentDataCard(
+                      "Diagnoses",
+                      documentFindings.diagnoses,
+                      "diagnoses"
+                    )}
+                    {renderDocumentDataCard(
+                      "Laboratory / Test Results",
+                      documentFindings.labs,
+                      "labs"
+                    )}
+                    {renderDocumentDataCard(
+                      "Prescription / Medications",
+                      documentFindings.medications,
+                      "medications"
+                    )}
+                    {renderDocumentDataCard(
+                      "Allergies",
+                      documentFindings.allergies,
+                      "allergies"
+                    )}
+                    {renderDocumentDataCard(
+                      "Procedures",
+                      documentFindings.procedures,
+                      "procedures"
+                    )}
+                    {renderDocumentDataCard(
+                      "Clinical Findings",
+                      documentFindings.findings,
+                      "findings"
+                    )}
+                  </div>
+                </div>
               )}
-
-            </div>
-
+            </>
           ) : (
-
             <div className="doctor-card-empty">
-              No documents were uploaded
-              for this session.
+              No documents were uploaded for this session.
             </div>
-
           )}
-
         </section>
 
 
@@ -1137,87 +2302,86 @@ export default function SessionReview() {
             ==================================================== */}
 
         {review?.summary &&
-          !showEditor && (
+          summaryStatus !== "accepted" &&
+          summaryStatus !== "rejected" && (
 
-          <section className="doctor-decision-card">
+            <section className="doctor-decision-card">
 
-            <div>
+              <div>
 
-              <p className="doctor-section-eyebrow">
-                PHYSICIAN DECISION
-              </p>
+                <p className="doctor-section-eyebrow">
+                  PHYSICIAN DECISION
+                </p>
 
-              <h2>
-                Verify this clinical summary
-              </h2>
+                <h2>
+                  Verify this clinical summary
+                </h2>
 
-              <p>
-                Review the generated information
-                and confirm whether it is suitable
-                for consultation.
-              </p>
+                <p>
+                  Review the generated information
+                  and confirm whether it is suitable
+                  for consultation.
+                </p>
 
-            </div>
-
-
-            <div className="doctor-decision-actions">
-
-              <button
-                type="button"
-                className="doctor-button doctor-button--secondary"
-                onClick={
-                  startEditing
-                }
-                disabled={isSaving}
-              >
-                Edit & Accept
-              </button>
+              </div>
 
 
-              <button
-                type="button"
-                className="doctor-button doctor-button--primary"
-                onClick={
-                  acceptSummary
-                }
-                disabled={
-                  isSaving ||
-                  summaryStatus ===
+              <div className="doctor-decision-actions">
+
+                <button
+                  type="button"
+                  className="doctor-button doctor-button--secondary"
+                  onClick={() => navigate(`/doctor/sessions/${sessionId}/edit-summary`)}
+                  disabled={isSaving}
+                >
+                  Edit Summary
+                </button>
+
+
+                <button
+                  type="button"
+                  className="doctor-button doctor-button--primary"
+                  onClick={
+                    acceptSummary
+                  }
+                  disabled={
+                    isSaving ||
+                    summaryStatus ===
                     "accepted"
-                }
-              >
-                {isSaving
-                  ? "Saving..."
-                  : summaryStatus ===
+                  }
+                >
+                  {isSaving
+                    ? "Saving..."
+                    : summaryStatus ===
                       "accepted"
-                    ? "Accepted"
-                    : "Accept Summary"}
-              </button>
+                      ? "Accepted"
+                      : "Accept Summary"}
+                </button>
 
 
-              <button
-                type="button"
-                className="doctor-button doctor-button--danger"
-                onClick={
-                  rejectSummary
-                }
-                disabled={
-                  isSaving ||
-                  summaryStatus ===
+                <button
+                  type="button"
+                  className="doctor-button doctor-button--danger"
+                  onClick={
+                    rejectSummary
+                  }
+                  disabled={
+                    isSaving ||
+                    summaryStatus ===
                     "rejected"
-                }
-              >
-                {summaryStatus ===
-                "rejected"
-                  ? "Rejected"
-                  : "Reject"}
-              </button>
+                  }
+                >
+                  {summaryStatus ===
+                    "rejected"
+                    ? "Rejected"
+                    : "Reject"}
+                </button>
 
-            </div>
+              </div>
 
-          </section>
+            </section>
 
-        )}
+          )}
 
       </div>
 

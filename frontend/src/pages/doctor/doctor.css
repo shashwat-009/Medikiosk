@@ -2159,86 +2159,6 @@
 
 
 /* ============================================================
-   EDITOR
-   ============================================================ */
-
-.doctor-editor {
-  padding: 25px 28px 28px;
-}
-
-
-.doctor-editor label {
-  display: block;
-
-  margin-bottom: 5px;
-
-  font-size: 13px;
-
-  font-weight: 750;
-}
-
-
-.doctor-editor__hint {
-  margin: 0 0 13px;
-
-  color: var(--mk-text-secondary);
-
-  font-size: 11px;
-
-  line-height: 1.5;
-}
-
-
-.doctor-editor textarea {
-  width: 100%;
-
-  min-height: 500px;
-
-  padding: 14px;
-
-  border: 1px solid var(--mk-border-dark);
-
-  border-radius: 9px;
-
-  background: #fbfdfd;
-
-  color: var(--mk-text);
-
-  font-family:
-    Consolas,
-    "SFMono-Regular",
-    monospace;
-
-  font-size: 11px;
-
-  line-height: 1.6;
-
-  resize: vertical;
-
-  outline: none;
-}
-
-
-.doctor-editor textarea:focus {
-  border-color: var(--mk-primary);
-
-  box-shadow:
-    0 0 0 3px rgba(15, 118, 110, 0.1);
-}
-
-
-.doctor-editor__actions {
-  margin-top: 14px;
-
-  display: flex;
-
-  justify-content: flex-end;
-
-  gap: 8px;
-}
-
-
-/* ============================================================
    ACTION ERROR
    ============================================================ */
 
@@ -2514,9 +2434,802 @@
     width: 100%;
   }
 
+}
+/* ============================================================
+   SESSION REVIEW POLISH — alignment and clinical readability
+   ============================================================ */
 
-  .doctor-editor {
-    padding: 20px;
+.doctor-page,
+.doctor-page * {
+  box-sizing: border-box;
+}
+
+.doctor-page {
+  min-height: 100vh;
+}
+
+.doctor-review-layout {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 28px 0 56px;
+}
+
+.doctor-patient-header,
+.doctor-review-status,
+.doctor-summary-card,
+.doctor-alert-card,
+.doctor-documents-card,
+.doctor-responses-card,
+.doctor-decision-card {
+  width: 100%;
+}
+
+.doctor-patient-header {
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(20, 40, 40, 0.06);
+}
+
+.doctor-review-status {
+  border-radius: 14px;
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.doctor-summary-card,
+.doctor-alert-card,
+.doctor-documents-card,
+.doctor-responses-card,
+.doctor-decision-card {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.doctor-summary-card {
+  margin-top: 18px;
+  border-radius: 16px;
+  box-shadow: 0 3px 16px rgba(20, 40, 40, 0.07);
+}
+
+.doctor-summary-card__header {
+  padding: 22px 26px;
+}
+
+.doctor-summary-content {
+  padding: 22px 24px 8px;
+}
+
+.doctor-summary-content > .review-section {
+  margin-bottom: 12px !important;
+}
+
+.review-section {
+  width: 100%;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.review-section__header h2 {
+  line-height: 1.35;
+}
+
+.review-item__answer {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.doctor-alert-card {
+  margin-top: 18px;
+  border-radius: 16px;
+}
+
+.doctor-documents-card,
+.doctor-responses-card {
+  margin-top: 18px;
+  border-radius: 16px;
+}
+
+.doctor-card-heading {
+  padding: 20px 24px;
+  gap: 20px;
+}
+
+.doctor-card-heading__description {
+  margin: 5px 0 0;
+  color: var(--mk-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 680px;
+}
+
+.doctor-documents-content {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+
+.doctor-document-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 16px;
+  border: 1px solid var(--mk-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.doctor-document-card__identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.doctor-document-card__identity > div:last-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.doctor-document-card__identity strong {
+  overflow-wrap: anywhere;
+}
+
+.doctor-document-card__identity span {
+  color: var(--mk-text-secondary);
+  font-size: 11px;
+}
+
+.doctor-extracted-clinical {
+  width: 100%;
+  margin-top: 4px;
+  padding: 20px;
+  border-top: 1px solid var(--mk-border);
+}
+
+.doctor-extracted-clinical__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.doctor-extracted-clinical__heading h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.doctor-extracted-clinical__heading > span {
+  color: var(--mk-text-muted);
+  font-size: 10px;
+  padding-top: 4px;
+}
+
+.doctor-document-data-group {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid var(--mk-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.doctor-document-data-group__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 14px;
+  background: rgba(22, 96, 92, 0.035);
+  border-bottom: 1px solid var(--mk-border);
+  color: var(--mk-primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.doctor-document-data-group__count {
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(22, 96, 92, 0.08);
+  font-size: 10px;
+}
+
+.doctor-document-data-group__items {
+  display: grid;
+  gap: 0;
+}
+
+.doctor-document-data-item {
+  padding: 13px 14px;
+  border-bottom: 1px solid rgba(20, 40, 40, 0.08);
+}
+
+.doctor-document-data-item:last-child {
+  border-bottom: none;
+}
+
+.doctor-document-data-item__source {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--mk-text-muted);
+  font-size: 9px;
+}
+
+.doctor-document-data-item__value {
+  white-space: pre-wrap;
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.doctor-document-data-field {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: baseline;
+  padding: 4px 0;
+}
+
+.doctor-document-data-field span {
+  color: var(--mk-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.doctor-document-data-field strong {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.doctor-responses-card {
+  margin-top: 18px;
+}
+
+.doctor-decision-card {
+  margin-top: 18px;
+  border-radius: 16px;
+}
+
+@media (max-width: 760px) {
+  .doctor-review-layout {
+    width: min(100% - 24px, 1120px);
+    padding-top: 16px;
   }
 
+  .doctor-card-heading,
+  .doctor-extracted-clinical__heading,
+  .doctor-document-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .doctor-document-card {
+    gap: 12px;
+  }
+
+  .doctor-document-data-field {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .doctor-summary-content {
+    padding: 16px 14px 4px;
+  }
+
+  .doctor-extracted-clinical {
+    padding: 16px 14px;
+  }
+}
+
+
+/* ============================================================
+   Physician review UX polish
+   ============================================================ */
+
+.doctor-summary-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.doctor-summary-content .review-section {
+  min-width: 0;
+  margin-bottom: 0 !important;
+  height: 100%;
+}
+
+.doctor-summary-content .review-section--history-of-present-illness,
+.doctor-summary-content .review-section--timeline,
+.doctor-summary-content .review-section--other-information {
+  grid-column: 1 / -1;
+}
+
+.doctor-summary-content .review-section__header {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+}
+
+.doctor-summary-content .review-section__content {
+  height: calc(100% - 51px);
+  box-sizing: border-box;
+}
+
+.doctor-extracted-clinical {
+  margin-top: 20px;
+  padding: 22px 24px 24px;
+  border-top: 1px solid var(--mk-border);
+  background: #fbfdfd;
+}
+
+.doctor-extracted-clinical__heading {
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.doctor-extracted-clinical__heading h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.doctor-extracted-clinical__heading p {
+  margin: 5px 0 0;
+  max-width: 720px;
+  color: var(--mk-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.doctor-extracted-clinical__heading > span {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid var(--mk-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--mk-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.doctor-document-source-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.doctor-document-source-strip > span:first-child {
+  margin-right: 2px;
+  color: var(--mk-text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.doctor-document-source-chip {
+  max-width: min(420px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 5px 9px;
+  border: 1px solid var(--mk-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--mk-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.doctor-document-findings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.doctor-document-data-group {
+  margin-top: 0;
+  min-width: 0;
+  border-radius: 14px;
+  box-shadow: var(--mk-shadow-sm);
+}
+
+.doctor-document-data-group__title {
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 10px 14px;
+}
+
+.doctor-document-data-group__title > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+}
+
+.doctor-document-data-group__title small {
+  color: var(--mk-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.doctor-document-data-item {
+  min-width: 0;
+  padding: 14px;
+  background: #fff;
+}
+
+.doctor-document-data-item + .doctor-document-data-item {
+  border-top: 1px solid var(--mk-border);
+}
+
+.doctor-document-primary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.doctor-document-primary strong {
+  min-width: 0;
+  color: var(--mk-text-primary);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.doctor-document-primary > span {
+  flex: 0 0 auto;
+  color: var(--mk-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.doctor-lab-result {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.doctor-lab-result strong {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.doctor-lab-result span {
+  color: var(--mk-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.doctor-lab-status {
+  padding: 4px 8px;
+  border: 1px solid var(--mk-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--mk-text-secondary);
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase;
+}
+
+.doctor-lab-status--high,
+.doctor-lab-status--low {
+  border-color: rgba(180, 35, 35, 0.22);
+  background: rgba(180, 35, 35, 0.07);
+  color: #9b2c2c;
+}
+
+.doctor-lab-status--normal {
+  background: rgba(22, 96, 92, 0.06);
+  color: var(--mk-primary-dark);
+}
+
+.doctor-document-meta-grid,
+.doctor-medication-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 13px;
+}
+
+.doctor-document-meta-grid > div,
+.doctor-medication-grid > div {
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--mk-border);
+}
+
+.doctor-document-meta-grid span,
+.doctor-medication-grid span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--mk-text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.doctor-document-meta-grid strong,
+.doctor-medication-grid strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--mk-text-primary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.doctor-document-medication .doctor-document-primary {
+  align-items: baseline;
+}
+
+.doctor-document-data-value-block {
+  display: grid;
+  gap: 7px;
+}
+
+@media (max-width: 900px) {
+  .doctor-summary-content,
+  .doctor-document-findings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .doctor-summary-content .review-section--history-of-present-illness,
+  .doctor-summary-content .review-section--timeline,
+  .doctor-summary-content .review-section--other-information {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 600px) {
+  .doctor-extracted-clinical {
+    padding: 18px 14px;
+  }
+
+  .doctor-document-meta-grid,
+  .doctor-medication-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .doctor-extracted-clinical__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* ============================================================
+   DOCTOR REVIEW POLISH v2
+   ============================================================ */
+
+.doctor-review-layout {
+  width: min(1240px, calc(100% - 40px));
+  padding: 28px 0 56px;
+  gap: 18px;
+}
+
+.doctor-patient-header,
+.doctor-review-status,
+.doctor-summary-card,
+.doctor-documents-card,
+.doctor-responses-card,
+.doctor-decision-card,
+.doctor-alert-card,
+.doctor-interview-highlights-card {
+  border-radius: 18px;
+}
+
+.doctor-card-heading {
+  padding: 22px 26px;
+}
+
+.doctor-card-heading__description {
+  margin-top: 5px;
+  line-height: 1.45;
+}
+
+.doctor-document-findings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.doctor-document-data-group {
+  overflow: hidden;
+  border: 1px solid var(--mk-border, #dfe7e7);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.doctor-document-data-group__title {
+  min-height: 48px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f8fbfb;
+  border-bottom: 1px solid var(--mk-border, #dfe7e7);
+}
+
+.doctor-document-data-group__title > span {
+  font-size: 14px;
+  font-weight: 800;
+  color: #164e4b;
+}
+
+.doctor-document-data-group__title small {
+  color: #718486;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.doctor-clinical-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.doctor-clinical-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.doctor-clinical-table th,
+.doctor-clinical-table td {
+  padding: 10px 14px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid #e6eded;
+}
+
+.doctor-clinical-table th {
+  background: #fbfcfc;
+  color: #718486;
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.doctor-clinical-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.doctor-clinical-table td strong {
+  color: #132f35;
+  font-weight: 750;
+}
+
+.doctor-clinical-table td:nth-child(1) { width: 30%; }
+.doctor-clinical-table td:nth-child(2) { width: 20%; }
+.doctor-clinical-table td:nth-child(3) { width: 28%; }
+.doctor-clinical-table td:nth-child(4) { width: 22%; }
+
+.doctor-medication-table td:nth-child(1) { width: 28%; }
+.doctor-medication-table td:nth-child(2) { width: 15%; }
+.doctor-medication-table td:nth-child(3) { width: 15%; }
+.doctor-medication-table td:nth-child(4) { width: 25%; }
+.doctor-medication-table td:nth-child(5) { width: 17%; }
+
+.doctor-table-unit {
+  color: #627578;
+  font-size: 12px;
+  margin-left: 2px;
+}
+
+.doctor-table-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.doctor-table-status--normal {
+  background: #edf7f4;
+  color: #2f7467;
+  border: 1px solid #d7ebe5;
+}
+
+.doctor-table-status--alert {
+  background: #fff1ef;
+  color: #b65348;
+  border: 1px solid #f0cbc6;
+}
+
+.doctor-document-compact-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.doctor-document-compact-row {
+  padding: 11px 15px;
+  border-bottom: 1px solid #e6eded;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+.doctor-document-compact-row:last-child { border-bottom: 0; }
+.doctor-document-compact-row span { display: flex; gap: 6px; font-size: 13px; }
+.doctor-document-compact-row b { color: #718486; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+
+/* Patient interview: visible by default, raw responses remain available below. */
+.doctor-interview-highlights-card {
+  background: #fff;
+  border: 1px solid var(--mk-border, #dfe7e7);
+  box-shadow: 0 5px 18px rgba(26, 62, 65, .045);
+  overflow: hidden;
+}
+
+.doctor-interview-highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid #e6eded;
+}
+
+.doctor-interview-highlight {
+  min-width: 0;
+  padding: 16px 18px;
+  border-right: 1px solid #e6eded;
+  border-bottom: 1px solid #e6eded;
+}
+
+.doctor-interview-highlight:nth-child(even) { border-right: 0; }
+.doctor-interview-highlight:nth-last-child(-n + 2) { border-bottom: 0; }
+.doctor-interview-highlight__label { display: block; color: #7a8b8d; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+.doctor-interview-highlight strong { display: block; color: #24434a; font-size: 13px; line-height: 1.4; }
+.doctor-interview-highlight p { margin: 7px 0 0; color: #17353b; font-size: 14px; line-height: 1.5; }
+.doctor-interview-highlight--alert { background: #fffaf9; box-shadow: inset 3px 0 0 #c85a4e; }
+.doctor-interview-highlight__alert { display: inline-flex; margin-top: 9px; color: #a4483f; font-size: 11px; font-weight: 750; }
+
+/* ============================================================
+   SESSION REVIEW — INTERVIEW HIGHLIGHTS RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 900px) {
+  .doctor-interview-highlight-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .doctor-interview-highlight {
+    border-right: 0;
+  }
+
+  .doctor-interview-highlight:nth-last-child(-n + 2) {
+    border-bottom: 1px solid #e6eded;
+  }
+
+  .doctor-interview-highlight:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .doctor-clinical-table {
+    min-width: 720px;
+  }
 }

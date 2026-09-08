@@ -28,6 +28,13 @@ const DOCUMENT_TYPES = [
   },
 ];
 
+const BACKEND_DOCUMENT_TYPES = {
+  prescription: "prescription",
+  labReport: "lab_report",
+  dischargeSummary: "discharge_summary",
+  other: "other",
+};
+
 export default function Documents() {
   const navigate = useNavigate();
 
@@ -125,10 +132,9 @@ export default function Documents() {
         "session_id",
         String(state.session.id)
       );
-
       formData.append(
         "document_type",
-        document.type
+        BACKEND_DOCUMENT_TYPES[document.type] || "other"
       );
 
       formData.append(
@@ -189,10 +195,10 @@ export default function Documents() {
 
       setError(
         err.message ||
-          translate(
-            language,
-            "common.error"
-          )
+        translate(
+          language,
+          "common.error"
+        )
       );
     } finally {
       setIsUploading(false);
@@ -299,11 +305,10 @@ export default function Documents() {
               <button
                 key={type.id}
                 type="button"
-                className={`documents__type ${
-                  documentType === type.id
+                className={`documents__type ${documentType === type.id
                     ? "documents__type--selected"
                     : ""
-                }`}
+                  }`}
                 onClick={() => {
                   setDocumentType(type.id);
                   setError("");
@@ -428,13 +433,13 @@ export default function Documents() {
 
               {isUploading
                 ? translate(
-                    language,
-                    "common.loading"
-                  )
+                  language,
+                  "common.loading"
+                )
                 : translate(
-                    language,
-                    "common.next"
-                  )}
+                  language,
+                  "common.next"
+                )}
 
               {!isUploading && (
                 <span>→</span>

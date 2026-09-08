@@ -1,9 +1,24 @@
 """
-Deterministic red-flag detection for MediKiosk.
+Hybrid red-flag detection for MediKiosk.
 
 This module detects predefined safety indicators from patient-reported
-text. It does not diagnose, prescribe treatment, process audio, or call
-external services.
+text using two layers:
+
+1. Deterministic rule-based detection
+   - Fast
+   - High precision
+   - Explicit multilingual phrases
+   - Existing safety/negation handling
+
+2. Local semantic detection
+   - Broader wording coverage
+   - Uses a multilingual sentence-embedding model
+   - Does not generate text
+   - Does not diagnose
+   - Does not call an external API
+
+The deterministic layer always runs first.
+The semantic layer is only used when no deterministic rule matches.
 """
 
 from __future__ import annotations
@@ -13,6 +28,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from .schemas import RedFlagPriority, RedFlagResult
+from .semantic_red_flags import (
+    SemanticRedFlagResult,
+    get_semantic_red_flag_detector,
+)
 
 
 @dataclass(frozen=True)
@@ -20,8 +39,8 @@ class DetectedRedFlag:
     """
     Compatibility result used by the existing red-flag tests.
 
-    The actual project RedFlagResult is validated before this compatibility
-    representation is returned.
+    The actual project RedFlagResult is validated before this
+    compatibility representation is returned.
     """
 
     detected: bool
@@ -34,6 +53,10 @@ class DetectedRedFlag:
     matched_text: str | None = None
     explanation: str | None = None
 
+
+# ======================================================================
+# DETERMINISTIC RED-FLAG PATTERNS
+# ======================================================================
 
 RED_FLAG_PATTERNS: dict[str, tuple[str, ...]] = {
     # ==================================================================
@@ -122,7 +145,6 @@ RED_FLAG_PATTERNS: dict[str, tuple[str, ...]] = {
         "होश खो दिया",
 
         # Bengali
-        "অজ্ঞান হয়ে গিয়েছিলাম",
         "অজ্ঞান হয়ে গিয়েছিলাম",
         "আমি অজ্ঞান হয়ে গিয়েছিলাম",
         "জ্ঞান হারিয়েছিলাম",
@@ -279,15 +301,35 @@ RED_FLAG_PATTERNS: dict[str, tuple[str, ...]] = {
 }
 
 
+# ======================================================================
+# MVP TRIAGE PRIORITY
+# ======================================================================
+
+RED_FLAG_PRIORITIES: dict[str, RedFlagPriority] = {
+    "severe_breathing_difficulty": RedFlagPriority.CRITICAL,
+    "loss_of_consciousness": RedFlagPriority.CRITICAL,
+    "severe_chest_pain": RedFlagPriority.CRITICAL,
+    "severe_bleeding": RedFlagPriority.CRITICAL,
+    "sudden_weakness_or_paralysis": RedFlagPriority.CRITICAL,
+}
+
+
+# ======================================================================
+# TEXT HELPERS
+# ======================================================================
+
 def _normalize(text: str) -> str:
     """Normalize case and repeated whitespace."""
+
     text = text.casefold()
     text = re.sub(r"\s+", " ", text)
+
     return text.strip()
 
 
 def _contains_phrase(text: str, phrase: str) -> bool:
     """Match a complete phrase rather than an arbitrary substring."""
+
     normalized_text = _normalize(text)
     normalized_phrase = _normalize(phrase)
 
@@ -307,12 +349,16 @@ def _is_negated_or_contextual(
     text: str,
     phrase: str,
 ) -> bool:
-    """Reject obvious negation and third-person/contextual references."""
+    """
+    Reject obvious negation and third-person/contextual references.
+    """
 
     normalized_text = _normalize(text)
     normalized_phrase = _normalize(phrase)
 
-    phrase_index = normalized_text.find(normalized_phrase)
+    phrase_index = normalized_text.find(
+        normalized_phrase
+    )
 
     if phrase_index < 0:
         return False
@@ -355,8 +401,54 @@ def _is_negated_or_contextual(
     )
 
 
+def _looks_like_semantic_negation(text: str) -> bool:
+    """
+    Detect explicit English negation of a symptom.
+
+    This is intentionally conservative.
+
+    We do NOT reject every sentence containing "not" because
+    statements such as:
+
+        "I am not able to breathe"
+
+    are themselves concerning.
+
+    We only reject common constructions where the patient clearly
+    denies experiencing a symptom.
+    """
+
+    normalized = _normalize(text)
+
+    denial_patterns = (
+        r"\bdo not have\b",
+        r"\bdon't have\b",
+        r"\bdoes not have\b",
+        r"\bdoesn't have\b",
+        r"\bdo not experience\b",
+        r"\bdon't experience\b",
+        r"\bdoes not experience\b",
+        r"\bdoesn't experience\b",
+        r"\bnot experiencing\b",
+        r"\bnot having\b",
+        r"\bno signs of\b",
+        r"\bno symptom of\b",
+        r"\bno symptoms of\b",
+        r"\bwithout any\b",
+        r"\bthere is no\b",
+        r"\bthere are no\b",
+    )
+
+    return any(
+        re.search(pattern, normalized)
+        for pattern in denial_patterns
+    )
+
+
 def _extract_text(answer: Any) -> str:
-    """Extract text from a string or existing PatientAnswer-like object."""
+    """
+    Extract text from a string or existing PatientAnswer-like object.
+    """
 
     if answer is None:
         return ""
@@ -364,10 +456,15 @@ def _extract_text(answer: Any) -> str:
     if isinstance(answer, str):
         return answer
 
-    resolved_text = getattr(answer, "resolved_text", None)
+    resolved_text = getattr(
+        answer,
+        "resolved_text",
+        None,
+    )
 
     if callable(resolved_text):
         value = resolved_text()
+
         if isinstance(value, str):
             return value
 
@@ -378,7 +475,11 @@ def _extract_text(answer: Any) -> str:
         "value",
         "content",
     ):
-        value = getattr(answer, attribute, None)
+        value = getattr(
+            answer,
+            attribute,
+            None,
+        )
 
         if isinstance(value, str):
             return value
@@ -386,23 +487,69 @@ def _extract_text(answer: Any) -> str:
     return ""
 
 
+# ======================================================================
+# RED FLAG DETECTOR
+# ======================================================================
+
 class RedFlagDetector:
     """
-    Deterministic rule-based red-flag detector.
+    Hybrid red-flag detector.
+
+    Detection order:
+
+        1. Deterministic rules
+        2. Semantic similarity
+
+    This preserves the existing deterministic behavior while
+    allowing novel wording to be recognized.
     """
 
     def __init__(
         self,
         patterns: dict[str, tuple[str, ...]] | None = None,
+        use_semantic: bool = True,
     ) -> None:
+
         self.patterns = (
             RED_FLAG_PATTERNS.copy()
             if patterns is None
             else patterns
         )
 
+        self.use_semantic = use_semantic
+
+        self._semantic_detector = None
+
+    # ------------------------------------------------------------------
+    # Lazy semantic detector
+    # ------------------------------------------------------------------
+
+    def _get_semantic_detector(self):
+        """
+        Load the semantic model only when it is actually needed.
+
+        This is important because normal deterministic matches
+        should not need to initialize the embedding model.
+        """
+
+        if not self.use_semantic:
+            return None
+
+        if self._semantic_detector is None:
+            self._semantic_detector = (
+                get_semantic_red_flag_detector()
+            )
+
+        return self._semantic_detector
+
+    # ------------------------------------------------------------------
+    # Main detection
+    # ------------------------------------------------------------------
+
     def detect(self, answer: Any) -> DetectedRedFlag:
-        """Detect the first matching predefined red flag."""
+        """
+        Detect a red flag using rules first and semantic similarity second.
+        """
 
         text = _extract_text(answer)
         normalized_text = _normalize(text)
@@ -410,7 +557,12 @@ class RedFlagDetector:
         if not normalized_text:
             return self._no_flag()
 
+        # ==============================================================
+        # LAYER 1 — DETERMINISTIC RULE DETECTION
+        # ==============================================================
+
         for flag_id, patterns in self.patterns.items():
+
             for phrase in patterns:
 
                 if not _contains_phrase(
@@ -429,13 +581,122 @@ class RedFlagDetector:
                     flag_id=flag_id,
                     matched_phrase=phrase,
                     matched_text=text,
+                    detection_method="rule",
                 )
+
+        # ==============================================================
+        # LAYER 2 — SEMANTIC DETECTION
+        # ==============================================================
+
+               # ==============================================================
+        # LAYER 2 — SEMANTIC DETECTION
+        # ==============================================================
+
+        if self.use_semantic:
+
+            # ----------------------------------------------------------
+            # Do not run semantic detection on obvious third-person,
+            # movie/story, or other contextual descriptions.
+            #
+            # The deterministic layer already protects these cases
+            # for exact phrases. The semantic layer must respect the
+            # same safety boundary.
+            # ----------------------------------------------------------
+
+            semantic_context_patterns = (
+                r"\bsomeone\b",
+                r"\bsomebody\b",
+                r"\ba person\b",
+                r"\banother person\b",
+                r"\bin a movie\b",
+                r"\bin the movie\b",
+                r"\bmovie about\b",
+                r"\bwatched a movie\b",
+                r"\bwatching a movie\b",
+            )
+
+            is_contextual_description = any(
+                re.search(
+                    pattern,
+                    normalized_text,
+                )
+                for pattern in semantic_context_patterns
+            )
+
+            # ----------------------------------------------------------
+            # Avoid obvious English symptom-denial constructions.
+            #
+            # We intentionally do not apply this blindly to Hindi/
+            # Hinglish because constructions such as:
+            #
+            #     "saans nahi aa rahi"
+            #
+            # are positive emergency statements.
+            # ----------------------------------------------------------
+
+            is_semantic_negation = (
+                _looks_like_semantic_negation(
+                    normalized_text
+                )
+            )
+
+            if (
+                not is_contextual_description
+                and not is_semantic_negation
+            ):
+
+                semantic_detector = (
+                    self._get_semantic_detector()
+                )
+
+                if semantic_detector is not None:
+
+                    semantic_result = (
+                        semantic_detector.detect(
+                            normalized_text
+                        )
+                    )
+
+                    if semantic_result.detected:
+
+                        return self._detected_semantic_flag(
+                            semantic_result=semantic_result,
+                            matched_text=text,
+                        )
+
+                semantic_detector = (
+                    self._get_semantic_detector()
+                )
+
+                if semantic_detector is not None:
+
+                    semantic_result = (
+                        semantic_detector.detect(
+                            normalized_text
+                        )
+                    )
+
+                    if semantic_result.detected:
+
+                        return self._detected_semantic_flag(
+                            semantic_result=semantic_result,
+                            matched_text=text,
+                        )
 
         return self._no_flag()
 
+    # ------------------------------------------------------------------
+    # Convenience
+    # ------------------------------------------------------------------
+
     def has_red_flag(self, answer: Any) -> bool:
         """Return only whether a red flag was detected."""
+
         return self.detect(answer).detected
+
+    # ------------------------------------------------------------------
+    # No flag
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _no_flag() -> DetectedRedFlag:
@@ -459,21 +720,25 @@ class RedFlagDetector:
             matched_pattern=None,
         )
 
+    # ------------------------------------------------------------------
+    # Rule-based flag
+    # ------------------------------------------------------------------
+
     @staticmethod
     def _detected_flag(
         flag_id: str,
         matched_phrase: str,
         matched_text: str,
+        detection_method: str = "rule",
     ) -> DetectedRedFlag:
         """
-        Validate the result using the real RedFlagResult schema.
-
-        Then expose category/matched_pattern compatibility properties
-        required by the existing tests.
+        Validate and expose a deterministic red flag.
         """
 
-        # Use an existing enum member rather than inventing a priority.
-        priority = next(iter(RedFlagPriority))
+        priority = RED_FLAG_PRIORITIES.get(
+            flag_id,
+            RedFlagPriority.HIGH,
+        )
 
         validated = RedFlagResult(
             detected=True,
@@ -482,7 +747,9 @@ class RedFlagDetector:
             matched_fields=[],
             matched_text=matched_text,
             explanation=(
-                f"Predefined red-flag pattern matched: {matched_phrase}"
+                "Predefined red-flag pattern matched: "
+                f"{matched_phrase}"
+                f" ({detection_method})"
             ),
         )
 
@@ -492,12 +759,83 @@ class RedFlagDetector:
             matched_pattern=matched_phrase,
             flag_id=validated.flag_id,
             priority=validated.priority,
-            matched_fields=tuple(validated.matched_fields),
+            matched_fields=tuple(
+                validated.matched_fields
+            ),
+            matched_text=validated.matched_text,
+            explanation=validated.explanation,
+        )
+
+    # ------------------------------------------------------------------
+    # Semantic flag
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _detected_semantic_flag(
+        semantic_result: SemanticRedFlagResult,
+        matched_text: str,
+    ) -> DetectedRedFlag:
+        """
+        Convert the semantic detector result into the project's
+        existing DetectedRedFlag representation.
+        """
+
+        flag_id = semantic_result.category
+
+        if not flag_id:
+            return DetectedRedFlag(
+                detected=False,
+                category=None,
+                matched_pattern=None,
+            )
+
+        priority = RED_FLAG_PRIORITIES.get(
+            flag_id,
+            RedFlagPriority.HIGH,
+        )
+
+        score_text = (
+            f"{semantic_result.score:.3f}"
+            if semantic_result.score is not None
+            else "unknown"
+        )
+
+        validated = RedFlagResult(
+            detected=True,
+            flag_id=flag_id,
+            priority=priority,
+            matched_fields=[],
+            matched_text=matched_text,
+            explanation=(
+                "Semantic red-flag detection matched "
+                f"'{flag_id}' with similarity score "
+                f"{score_text}."
+            ),
+        )
+
+        return DetectedRedFlag(
+            detected=validated.detected,
+            category=validated.flag_id,
+            matched_pattern=(
+                semantic_result.matched_text
+            ),
+            flag_id=validated.flag_id,
+            priority=validated.priority,
+            matched_fields=tuple(
+                validated.matched_fields
+            ),
             matched_text=validated.matched_text,
             explanation=validated.explanation,
         )
 
 
+# ======================================================================
+# CONVENIENCE FUNCTION
+# ======================================================================
+
 def detect_red_flags(answer: Any) -> DetectedRedFlag:
-    """Convenience API for direct red-flag detection."""
+    """
+    Convenience function for hybrid red-flag detection.
+    """
+
     return RedFlagDetector().detect(answer)

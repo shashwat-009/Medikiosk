@@ -18,6 +18,7 @@ import ModeSelection from "./pages/patient/ModeSelection";
 import DoctorLogin from "./pages/doctor/Login";
 import DoctorDashboard from "./pages/doctor/Dashboard";
 import SessionReview from "./pages/doctor/SessionReview";
+import EditSummary from "./pages/doctor/EditSummary";
 
 
 /* ============================================================
@@ -110,6 +111,11 @@ export default function App() {
         <Route
           path="/doctor/session/:sessionId"
           element={<SessionReview />}
+        />
+
+        <Route
+          path="/doctor/sessions/:sessionId/edit-summary"
+          element={<EditSummary />}
         />
 
       </Routes>

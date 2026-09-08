@@ -287,3 +287,57 @@ def test_convenience_function():
     )
 
     assert _is_detected(result) is True
+    
+def test_severe_breathing_difficulty_is_critical():
+    detector = RedFlagDetector()
+
+    result = detector.detect(
+        "I cannot breathe properly."
+    )
+
+    assert _is_detected(result) is True
+    assert result.priority.value == "critical"
+
+
+def test_loss_of_consciousness_is_critical():
+    detector = RedFlagDetector()
+
+    result = detector.detect(
+        "I passed out yesterday."
+    )
+
+    assert _is_detected(result) is True
+    assert result.priority.value == "critical"
+
+
+def test_severe_chest_pain_is_critical():
+    detector = RedFlagDetector()
+
+    result = detector.detect(
+        "I have severe chest pain."
+    )
+
+    assert _is_detected(result) is True
+    assert result.priority.value == "critical"
+
+
+def test_severe_bleeding_is_critical():
+    detector = RedFlagDetector()
+
+    result = detector.detect(
+        "I am bleeding heavily."
+    )
+
+    assert _is_detected(result) is True
+    assert result.priority.value == "critical"
+
+
+def test_sudden_weakness_is_critical():
+    detector = RedFlagDetector()
+
+    result = detector.detect(
+        "I suddenly have weakness on one side."
+    )
+
+    assert _is_detected(result) is True
+    assert result.priority.value == "critical" 
