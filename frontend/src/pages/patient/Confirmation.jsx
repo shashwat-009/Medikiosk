@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useKiosk } from "../../context/KioskContext";
 import { translate } from "../../i18n";
+import { api } from "../../services/api";
 
 import "./Confirmation.css";
 
@@ -11,33 +13,82 @@ export default function Confirmation() {
   const { state } = useKiosk();
 
   const language = state.language || "en";
+  const session = state.session;
+  const doctorId = session?.doctor_id ?? session?.doctorId ?? null;
+
+  const [doctor, setDoctor] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAssignedDoctor() {
+      if (!doctorId) {
+        setDoctor(null);
+        return;
+      }
+
+      try {
+        const doctorData = await api(`/doctors/${doctorId}`);
+
+        if (!cancelled) {
+          setDoctor(doctorData);
+        }
+      } catch (error) {
+        console.error("Unable to load assigned doctor:", error);
+
+        if (!cancelled) {
+          setDoctor(null);
+        }
+      }
+    }
+
+    loadAssignedDoctor();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [doctorId]);
 
   function handleContinue() {
-    /*
-     * Temporary MVP behavior.
-     *
-     * There is currently no consultation/HIS
-     * handoff page in the patient architecture.
-     *
-     * Later this will be replaced with the
-     * appropriate consultation handoff.
-     */
     navigate("/");
+  }
+
+  function getDoctorInitials(name) {
+    if (!name) {
+      return "D";
+    }
+
+    const cleanName = name
+      .replace(/^Dr\.?\s*/i, "")
+      .trim();
+
+    const parts = cleanName.split(/\s+/).filter(Boolean);
+
+    if (parts.length === 1) {
+      return parts[0].charAt(0).toUpperCase();
+    }
+
+    return (
+      parts[0].charAt(0) +
+      parts[parts.length - 1].charAt(0)
+    ).toUpperCase();
   }
 
   return (
     <main className="confirmation">
       <section className="confirmation__container">
-
         <div className="confirmation__card">
 
-          {/* Success indicator */}
+          {/* Completion indicator */}
 
-          <div className="confirmation__icon">
+          <div
+            className="confirmation__icon"
+            aria-hidden="true"
+          >
             ✓
           </div>
 
-          {/* Heading */}
+          {/* Completion message */}
 
           <p className="confirmation__eyebrow">
             {translate(
@@ -60,12 +111,80 @@ export default function Confirmation() {
             )}
           </p>
 
+          {/* Assigned doctor — primary patient handoff */}
+
+          {doctor && (
+            <section
+              className="confirmation__doctor"
+              aria-labelledby="confirmation-doctor-heading"
+            >
+              <div className="confirmation__doctor-heading">
+                <p className="confirmation__doctor-label">
+                  {translate(
+                    language,
+                    "confirmation.doctorLabel"
+                  )}
+                </p>
+
+                <span
+                  className="confirmation__doctor-badge"
+                  aria-hidden="true"
+                >
+                  ✓
+                </span>
+              </div>
+
+              <div className="confirmation__doctor-card">
+                <div
+                  className="confirmation__doctor-icon"
+                  aria-hidden="true"
+                >
+                  {getDoctorInitials(doctor.name)}
+                </div>
+
+                <div className="confirmation__doctor-details">
+                  <h2 id="confirmation-doctor-heading">
+                    {doctor.name}
+                  </h2>
+
+                  {doctor.specialization && (
+                    <p className="confirmation__doctor-specialization">
+                      {doctor.specialization}
+                    </p>
+                  )}
+
+                  {doctor.department &&
+                    doctor.department !== doctor.specialization && (
+                      <p className="confirmation__doctor-department">
+                        {doctor.department}
+                      </p>
+                    )}
+                </div>
+              </div>
+
+              <div className="confirmation__direction">
+                <span
+                  className="confirmation__direction-icon"
+                  aria-hidden="true"
+                >
+                  →
+                </span>
+
+                <p>
+                  {translate(
+                    language,
+                    "confirmation.doctorInstruction"
+                  )}
+                </p>
+              </div>
+            </section>
+          )}
+
           {/* Completion status */}
 
           <div className="confirmation__status">
-
             <div className="confirmation__status-item">
-              <span>✓</span>
+              <span aria-hidden="true">✓</span>
 
               <p>
                 {translate(
@@ -76,7 +195,7 @@ export default function Confirmation() {
             </div>
 
             <div className="confirmation__status-item">
-              <span>✓</span>
+              <span aria-hidden="true">✓</span>
 
               <p>
                 {translate(
@@ -87,7 +206,7 @@ export default function Confirmation() {
             </div>
 
             <div className="confirmation__status-item">
-              <span>✓</span>
+              <span aria-hidden="true">✓</span>
 
               <p>
                 {translate(
@@ -96,10 +215,9 @@ export default function Confirmation() {
                 )}
               </p>
             </div>
-
           </div>
 
-          {/* Continue */}
+          {/* Finish kiosk session */}
 
           <button
             type="button"
@@ -111,10 +229,10 @@ export default function Confirmation() {
               "confirmation.continue"
             )}
 
-            <span>→</span>
+            <span aria-hidden="true">→</span>
           </button>
 
-          {/* Note */}
+          {/* Patient reminder */}
 
           <p className="confirmation__note">
             {translate(
@@ -122,9 +240,7 @@ export default function Confirmation() {
               "confirmation.note"
             )}
           </p>
-
         </div>
-
       </section>
     </main>
   );

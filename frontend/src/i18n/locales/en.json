@@ -108,7 +108,9 @@
   "statusHistory": "Clinical history prepared",
   "statusReview": "Ready for healthcare team review",
   "continue": "Continue to consultation",
-  "note": "You may now speak with your healthcare team."
+  "note": "You may now speak with your healthcare team.",
+  "doctorLabel" : "Your assigned doctor",
+  "doctorInstruction": "Please proceed to your assigned doctor for consultation."
 },
 
 "mode": {

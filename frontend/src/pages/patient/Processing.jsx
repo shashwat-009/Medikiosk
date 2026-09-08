@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useKiosk } from "../../context/KioskContext";
+
+import { assignDoctorToSession } from "../../services/sessionService";
 import { translate } from "../../i18n";
 
 import { documentService } from "../../services/documentService";
@@ -12,7 +14,7 @@ import "./Processing.css";
 export default function Processing() {
   const navigate = useNavigate();
 
-  const { state } = useKiosk();
+  const { state, setSession } = useKiosk();
 
   const language = state.language || "en";
 
@@ -166,7 +168,50 @@ export default function Processing() {
 
         /*
          * ============================================
-         * STEP 3: CONFIRMATION
+         * STEP 3: ASSIGN DOCTOR
+         * ============================================
+         *
+         * The selected consultation mode determines
+         * the department used by the backend to assign
+         * the appropriate doctor.
+         *
+         * No doctor is hardcoded here.
+         */
+
+        console.log(
+          "PROCESSING: assigning doctor for mode =",
+          state.mode
+        );
+
+        const assignedSession =
+          await assignDoctorToSession(
+            sessionId,
+            state.mode || "allopathy"
+          );
+
+        console.log(
+          "PROCESSING: doctor assigned successfully =",
+          assignedSession
+        );
+
+        /*
+         * Keep the updated session in KioskContext.
+         *
+         * This makes the backend-provided doctor_id
+         * available to the confirmation screen.
+         */
+
+        if (assignedSession?.id) {
+          setSession(assignedSession);
+        } else {
+          throw new Error(
+            "The server did not return the updated session after doctor assignment."
+          );
+        }
+
+        /*
+         * ============================================
+         * STEP 4: CONFIRMATION
          * ============================================
          */
 
