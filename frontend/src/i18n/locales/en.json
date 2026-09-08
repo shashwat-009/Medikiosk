@@ -7,29 +7,43 @@
     "languageHint": "Choose your preferred language",
     "needHelp": "Need help? Call Kiosk Mitra"
   },
-
   "identify": {
     "eyebrow": "PATIENT IDENTIFICATION",
-    "title": "Let's identify you",
-    "description": "Provide your details to begin your visit.",
-    "name": "Full name",
-    "age": "Age",
-    "gender": "Gender",
-    "phone": "Phone number",
+    "title": "Let's get you started",
+    "description": "Tell us a few basic details. You can type them or use the microphone.",
+    "stepLabel": "Step 1 of 3",
+    "name": "Your name",
+    "nameHint": "As you would like it recorded",
     "namePlaceholder": "Enter your full name",
-    "agePlaceholder": "Age",
-    "genderPlaceholder": "Select",
+    "age": "Age",
+    "ageHint": "Choose your age",
+    "ageSelector": "Age selector",
+    "ageWheelHint": "Swipe or scroll to change age",
+    "decreaseAge": "Decrease age",
+    "increaseAge": "Increase age",
+    "tapSwipeSpeak": "Tap, swipe or speak",
+    "gender": "Gender",
+    "genderHint": "Choose one option",
     "male": "Male",
     "female": "Female",
     "other": "Other",
-    "phonePlaceholder": "Enter your phone number",
-    "continue": "Continue",
+    "selectOne": "Select one",
+    "aadhaar": "Aadhaar number",
+    "aadhaarHint": "Your 12-digit identity number",
+    "aadhaarPlaceholder": "XXXX XXXX XXXX",
+    "aadhaarHelp": "Enter all 12 digits. You can also say them aloud.",
+    "twelveDigits": "12 digits",
+    "required": "Required",
     "nameRequired": "Please enter your name.",
     "ageRequired": "Please enter your age.",
     "genderRequired": "Please select your gender.",
-    "phoneRequired": "Please enter your phone number."
+    "aadhaarRequired": "Please enter a valid 12-digit Aadhaar number.",
+    "genderNotUnderstood": "We couldn't understand that. Please say male, female, or other.",
+    "ageNotUnderstood": "We couldn't understand the age. Please say the number again.",
+    "aadhaarIncomplete": "Please say all 12 digits of your Aadhaar number.",
+    "privacyNote": "Your details are used only to prepare your consultation.",
+    "continue": "Continue"
   },
-
   "consent": {
     "eyebrow": "CONSENT",
     "title": "Your consent",
@@ -42,7 +56,6 @@
     "continue": "Continue",
     "required": "Please accept both consent options before continuing."
   },
-
   "interview": {
     "eyebrow": "CLINICAL HISTORY",
     "title": "Tell us about your health",
@@ -58,7 +71,6 @@
     "back": "Back",
     "answerLabel": "Your answer",
     "privacy": "Your responses are recorded as part of your clinical history.",
-
     "questions": {
       "chiefComplaint": "What is your main health problem today?",
       "symptoms": "Please tell us about the symptoms you are experiencing.",
@@ -66,67 +78,61 @@
       "fever": "Do you have a fever?",
       "medications": "Are you currently taking any medicines?"
     },
-
     "errors": {
       "answerRequired": "Please provide an answer before continuing.",
       "voiceError": "We couldn't understand your response. Please try again."
     }
   },
-
- "documents": {
-  "eyebrow": "MEDICAL DOCUMENTS",
-  "title": "Add your medical documents",
-  "description": "Upload prescriptions, lab reports, discharge summaries or other medical documents.",
-  "documentType": "What type of document are you adding?",
-  "prescription": "Prescription",
-  "labReport": "Lab report",
-  "dischargeSummary": "Discharge summary",
-  "other": "Other",
-  "selected": "Selected documents",
-  "upload": "Upload document",
-  "fileHint": "JPG, PNG or PDF",
-  "skip": "Skip",
-  "patientRequired": "Patient information is missing.",
-  "sessionRequired": "Active session information is missing."
-},
-
- "processing": {
-  "eyebrow": "PROCESSING",
-  "title": "Preparing your clinical history",
-  "description": "Please wait while we organize your information.",
-  "stepResponses": "Organizing your responses",
-  "stepHistory": "Preparing your clinical history",
-  "stepReview": "Preparing for doctor review",
-  "note": "Please do not close or refresh this page."
-},
-
-"confirmation": {
-  "eyebrow": "COMPLETE",
-  "title": "Your information is ready",
-  "description": "Your clinical history has been prepared for the healthcare team.",
-  "statusPatient": "Patient information recorded",
-  "statusHistory": "Clinical history prepared",
-  "statusReview": "Ready for healthcare team review",
-  "continue": "Continue to consultation",
-  "note": "You may now speak with your healthcare team.",
-  "doctorLabel" : "Your assigned doctor",
-  "doctorInstruction": "Please proceed to your assigned doctor for consultation."
-},
-
-"mode": {
-  "eyebrow": "CONSULTATION MODE",
-  "title": "Choose your consultation mode",
-  "description": "Choose the consultation approach you would like to use for your health history.",
-  "allopathy": {
-    "title": "Allopathy",
-    "description": "Standard clinical history based on your symptoms and chief complaint."
+  "documents": {
+    "eyebrow": "MEDICAL DOCUMENTS",
+    "title": "Add your medical documents",
+    "description": "Upload prescriptions, lab reports, discharge summaries or other medical documents.",
+    "documentType": "What type of document are you adding?",
+    "prescription": "Prescription",
+    "labReport": "Lab report",
+    "dischargeSummary": "Discharge summary",
+    "other": "Other",
+    "selected": "Selected documents",
+    "upload": "Upload document",
+    "fileHint": "JPG, PNG or PDF",
+    "skip": "Skip",
+    "patientRequired": "Patient information is missing.",
+    "sessionRequired": "Active session information is missing."
   },
-  "ayush": {
-    "title": "Ayurveda / AYUSH",
-    "description": "AYUSH-oriented history including Prakriti, Vikriti, Ahara, Vihara and related assessment fields."
-  }
-},
-
+  "processing": {
+    "eyebrow": "PROCESSING",
+    "title": "Preparing your clinical history",
+    "description": "Please wait while we organize your information.",
+    "stepResponses": "Organizing your responses",
+    "stepHistory": "Preparing your clinical history",
+    "stepReview": "Preparing for doctor review",
+    "note": "Please do not close or refresh this page."
+  },
+  "confirmation": {
+    "eyebrow": "COMPLETE",
+    "title": "Your information is ready",
+    "description": "Your clinical history has been prepared for the healthcare team.",
+    "statusPatient": "Patient information recorded",
+    "statusHistory": "Clinical history prepared",
+    "statusReview": "Ready for healthcare team review",
+    "continue": "Continue to consultation",
+    "note": "You may now speak with your healthcare team.",
+    "doctorLabel": "Your assigned doctor",
+    "doctorInstruction": "Please proceed to your assigned doctor for consultation."
+  },
+  "mode": {
+    "eyebrow": "CONSULTATION MODE",
+    "title": "Choose your consultation mode",
+    "description": "Choose the consultation approach you would like to use for your health history.",
+    "allopathy": {
+      "title": "Allopathy",
+      "description": "Standard clinical history based on your symptoms and chief complaint."
+    },
+    "ayush": {
+      "title": "Ayurveda / AYUSH",
+      "description": "AYUSH-oriented history including Prakriti, Vikriti, Ahara, Vihara and related assessment fields."
+    }
+  },
   "doctor": {
     "login": "Doctor login",
     "dashboard": "Doctor dashboard",
@@ -136,7 +142,6 @@
     "edit": "Edit",
     "save": "Save"
   },
-
   "common": {
     "back": "Back",
     "next": "Next",

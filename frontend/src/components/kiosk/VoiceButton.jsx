@@ -1,5 +1,4 @@
-import { useRef, useState } from "react";
-
+import { useEffect, useRef, useState } from "react";
 import "./VoiceButton.css";
 
 export default function VoiceButton({
@@ -9,31 +8,43 @@ export default function VoiceButton({
   onError,
 }) {
   const mediaRecorderRef = useRef(null);
+  const streamRef = useRef(null);
   const chunksRef = useRef([]);
-
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
-  const isListening =
-    state === "listening" || isRecording;
+  const isListening = isRecording || state === "listening";
+  const isProcessing = isTranscribing || state === "processing";
 
-  const isProcessing =
-    state === "processing";
+  useEffect(() => {
+    return () => {
+      const recorder = mediaRecorderRef.current;
 
-  async function startRecording() {
-    if (isRecording || isProcessing) {
-      return;
-    }
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+      }
+
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const startRecording = async () => {
+    if (isProcessing || isListening) return;
 
     try {
-      const stream =
-        await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Microphone access is not supported by this browser.");
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+
+      streamRef.current = stream;
+      chunksRef.current = [];
 
       const recorder = new MediaRecorder(stream);
-
       mediaRecorderRef.current = recorder;
-      chunksRef.current = [];
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -41,111 +52,89 @@ export default function VoiceButton({
         }
       };
 
-      recorder.onstop = async () => {
-        stream
-          .getTracks()
-          .forEach((track) => track.stop());
-
-        const audioBlob = new Blob(
-          chunksRef.current,
-          {
-            type: recorder.mimeType,
-          }
-        );
-
+      recorder.onerror = () => {
         setIsRecording(false);
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        onError?.("Unable to record audio.");
+      };
+
+      recorder.onstop = async () => {
+        setIsRecording(false);
+        setIsTranscribing(true);
+
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
 
         try {
+          const audioBlob = new Blob(chunksRef.current, {
+            type: recorder.mimeType || "audio/webm",
+          });
+
           const formData = new FormData();
+          formData.append("file", audioBlob, "interview.webm");
 
-          formData.append(
-            "file",
-            audioBlob,
-            "interview.webm"
-          );
+          const apiBaseUrl =
+            import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
-          const response = await fetch(
-            `${
-              import.meta.env.VITE_API_BASE_URL ??
-              "http://localhost:8000"
-            }/asr/transcribe`,
-            {
-              method: "POST",
-              body: formData,
-            }
-          );
+          const response = await fetch(`${apiBaseUrl}/asr/transcribe`, {
+            method: "POST",
+            body: formData,
+          });
 
           if (!response.ok) {
-            const errorData =
-              await response.json().catch(
-                () => null
-              );
-
-            throw new Error(
-              errorData?.detail ||
-                `ASR request failed: ${response.status}`
-            );
+            throw new Error(`ASR request failed: ${response.status}`);
           }
 
-          const result =
-            await response.json();
+          const result = await response.json();
 
-          if (!result.text?.trim()) {
-            throw new Error(
-              "No speech was detected."
-            );
+          if (typeof result.text !== "string") {
+            throw new Error("ASR response did not contain text.");
           }
 
           onResult?.(result.text);
         } catch (error) {
-          console.error(
-            "ASR transcription failed:",
-            error
-          );
-
-          onError?.(error);
+          console.error("Voice transcription failed:", error);
+          onError?.(error?.message || "Unable to process your voice.");
+        } finally {
+          setIsTranscribing(false);
+          chunksRef.current = [];
         }
       };
 
       recorder.start();
-
       setIsRecording(true);
       onStart?.();
     } catch (error) {
-      console.error(
-        "Microphone access failed:",
-        error
-      );
-
+      console.error("Unable to start voice recording:", error);
       setIsRecording(false);
-      onError?.(error);
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      onError?.(error?.message || "Unable to access the microphone.");
     }
-  }
+  };
 
-  function stopRecording() {
-    if (
-      !mediaRecorderRef.current ||
-      mediaRecorderRef.current.state ===
-        "inactive"
-    ) {
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+
+    if (!recorder || recorder.state === "inactive") {
+      setIsRecording(false);
       return;
     }
 
-    mediaRecorderRef.current.stop();
-  }
+    recorder.stop();
+  };
 
-  function handleClick() {
-    if (isRecording) {
+  const handleClick = () => {
+    if (isListening) {
       stopRecording();
       return;
     }
 
-    if (isProcessing) {
-      return;
-    }
+    if (isProcessing) return;
 
     startRecording();
-  }
+  };
 
   const label = isListening
     ? "Listening..."
@@ -157,21 +146,24 @@ export default function VoiceButton({
     <div className="voice-button">
       <button
         type="button"
-        className={`voice-button__control ${
-          isListening
-            ? "voice-button__control--listening"
-            : ""
-        }`}
+        className={[
+          "voice-button__control",
+          isListening ? "voice-button__control--listening" : "",
+          isProcessing ? "voice-button__control--processing" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         onClick={handleClick}
         disabled={isProcessing}
         aria-label={label}
+        aria-pressed={isRecording}
       >
-        <span className="voice-button__icon">
-          {isListening ? "●" : "🎙"}
+        <span className="voice-button__icon" aria-hidden="true">
+          {isListening ? "■" : isProcessing ? "…" : "🎙"}
         </span>
       </button>
 
-      <span className="voice-button__label">
+      <span className="voice-button__label" aria-live="polite">
         {label}
       </span>
     </div>

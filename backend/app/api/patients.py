@@ -17,20 +17,22 @@ def create_patient(
     patient_data: PatientCreate,
     db: Session = Depends(get_db)
 ):
-    # Check whether patient already exists
+    # Check whether patient already exists using Aadhaar
     existing_patient = db.query(Patient).filter(
-        Patient.phone == patient_data.phone
+        Patient.aadhaar == patient_data.aadhaar
     ).first()
 
     if existing_patient is not None:
+        # Same Aadhaar = same patient.
+        # Do NOT create another patient.
         return existing_patient
 
-    # Create new patient only if phone is not found
+    # Create patient only when Aadhaar does not already exist
     new_patient = Patient(
         name=patient_data.name,
         age=patient_data.age,
         gender=patient_data.gender,
-        phone=patient_data.phone
+        aadhaar=patient_data.aadhaar
     )
 
     db.add(new_patient)
@@ -46,13 +48,22 @@ def get_patients(db: Session = Depends(get_db)):
 
 
 @router.get("/{patient_id}", response_model=PatientResponse)
-def get_patient(patient_id: int, db: Session = Depends(get_db)):
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+def get_patient(
+    patient_id: int,
+    db: Session = Depends(get_db)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id
+    ).first()
 
     if patient is None:
-        raise HTTPException(status_code=404, detail="Patient not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found"
+        )
 
     return patient
+
 
 @router.put("/{patient_id}", response_model=PatientResponse)
 def update_patient(
@@ -60,30 +71,41 @@ def update_patient(
     patient_data: PatientCreate,
     db: Session = Depends(get_db)
 ):
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id
+    ).first()
 
     if patient is None:
-        raise HTTPException(status_code=404, detail="Patient not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found"
+        )
 
     patient.name = patient_data.name
     patient.age = patient_data.age
     patient.gender = patient_data.gender
-    patient.phone = patient_data.phone
+    patient.aadhaar = patient_data.aadhaar
 
     db.commit()
     db.refresh(patient)
 
     return patient
 
+
 @router.delete("/{patient_id}")
 def delete_patient(
     patient_id: int,
     db: Session = Depends(get_db)
 ):
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id
+    ).first()
 
     if patient is None:
-        raise HTTPException(status_code=404, detail="Patient not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found"
+        )
 
     db.delete(patient)
     db.commit()

@@ -5,7 +5,7 @@ class PatientCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     age: int = Field(ge=0, le=150)
     gender: str
-    phone: str | None = None
+    aadhaar: str = Field(min_length=12, max_length=12)
 
 
 class PatientResponse(BaseModel):
@@ -13,7 +13,7 @@ class PatientResponse(BaseModel):
     name: str
     age: int
     gender: str
-    phone: str | None
+    aadhaar: str | None
     created_at: object
 
     class Config:
