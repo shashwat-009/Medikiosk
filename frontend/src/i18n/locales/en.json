@@ -54,7 +54,8 @@
     "sharing": "I consent to sharing my information with the healthcare team for my consultation.",
     "notice": "You can ask the healthcare team about how your information is used.",
     "continue": "Continue",
-    "required": "Please accept both consent options before continuing."
+    "required": "Please accept both consent options before continuing.",
+    "dpdpNotice": "DPDP Act, 2023: Your personal information is collected and handled with privacy and consent safeguards designed in accordance with the Digital Personal Data Protection Act, 2023."
   },
   "interview": {
     "eyebrow": "CLINICAL HISTORY",

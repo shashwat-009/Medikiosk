@@ -92,10 +92,10 @@ export default function Consent() {
 
       setError(
         err.message ||
-          translate(
-            language,
-            "common.error"
-          )
+        translate(
+          language,
+          "common.error"
+        )
       );
     } finally {
       setIsSubmitting(false);
@@ -271,6 +271,13 @@ export default function Consent() {
 
           </div>
 
+          <p className="consent__dpdp-notice">
+            {translate(
+              language,
+              "consent.dpdpNotice"
+            )}
+          </p>
+
 
           {/* Error */}
 
@@ -291,13 +298,13 @@ export default function Consent() {
 
             {isSubmitting
               ? translate(
-                  language,
-                  "common.loading"
-                )
+                language,
+                "common.loading"
+              )
               : translate(
-                  language,
-                  "consent.continue"
-                )}
+                language,
+                "consent.continue"
+              )}
 
             {!isSubmitting && (
               <span>→</span>

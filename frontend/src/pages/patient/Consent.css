@@ -297,3 +297,15 @@
     padding: 24px 20px;
   }
 }
+
+.consent__dpdp-notice {
+  margin: 0 0 18px;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.55;
+  font-weight: 600;
+}
+
+.consent__dpdp-notice strong {
+  font-weight: 800;
+}
