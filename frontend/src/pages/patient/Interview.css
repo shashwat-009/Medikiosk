@@ -379,3 +379,57 @@
     width: 100%;
   }
 }
+.interview__question-with-tts {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.interview__listen-question {
+  align-self: flex-start;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  min-height: 46px;
+  padding: 10px 16px;
+
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+
+  background: var(--teal-050);
+  color: var(--teal-900);
+
+  font-size: 14px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.interview__listen-question:hover {
+  background: var(--teal-100);
+  border-color: var(--teal-600);
+  transform: translateY(-1px);
+}
+
+.interview__listen-question:active {
+  transform: translateY(0);
+}
+
+.interview__listen-question:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.interview__listen-question:focus-visible {
+  outline: 3px solid var(--teal-600);
+  outline-offset: 3px;
+}

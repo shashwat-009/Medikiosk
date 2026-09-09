@@ -72,6 +72,7 @@
     "back": "Back",
     "answerLabel": "Your answer",
     "privacy": "Your responses are recorded as part of your clinical history.",
+    "listenQuestion": "Listen to question",
     "questions": {
       "chiefComplaint": "What is your main health problem today?",
       "symptoms": "Please tell us about the symptoms you are experiencing.",

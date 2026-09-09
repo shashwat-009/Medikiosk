@@ -14,21 +14,23 @@ const LANGUAGE_MAP = {
 const audioCache = new Map();
 
 // Requests currently being generated.
-// Prevents duplicate requests if the user clicks quickly.
+// Prevents duplicate requests if the same text is requested quickly.
 const pendingRequests = new Map();
 
 let currentAudio = null;
 let currentObjectUrl = null;
+
+// Used to invalidate old async playback requests.
+// If a new question/speech starts, an older pending request
+// is no longer allowed to start playing when it finishes.
+let speechGeneration = 0;
 
 function makeCacheKey(text, language) {
   return `${language}::${text}`;
 }
 
 async function generateAudio(text, languageCode) {
-  const cacheKey = makeCacheKey(
-    text,
-    languageCode
-  );
+  const cacheKey = makeCacheKey(text, languageCode);
 
   // Already generated.
   if (audioCache.has(cacheKey)) {
@@ -72,10 +74,9 @@ async function generateAudio(text, languageCode) {
         );
       }
 
-      audioCache.set(
-        cacheKey,
-        blob
-      );
+      // Cache the generated audio so repeated playback
+      // does not require another backend request.
+      audioCache.set(cacheKey, blob);
 
       return blob;
     })
@@ -83,10 +84,7 @@ async function generateAudio(text, languageCode) {
       pendingRequests.delete(cacheKey);
     });
 
-  pendingRequests.set(
-    cacheKey,
-    request
-  );
+  pendingRequests.set(cacheKey, request);
 
   return request;
 }
@@ -107,17 +105,57 @@ export async function speakText(
     LANGUAGE_MAP[language] ??
     LANGUAGE_MAP.en;
 
-  // Stop previous speech immediately.
-  stopSpeech();
+  /*
+   * Every new speech request invalidates any older
+   * asynchronous speech request.
+   *
+   * This is important for adaptive questions:
+   *
+   * Question 1 starts generating
+   *        ↓
+   * Question 2 appears
+   *        ↓
+   * Question 1 finishes later
+   *
+   * Question 1 must NOT start playing.
+   */
+  const generation = ++speechGeneration;
 
-  const audioBlob =
-    await generateAudio(
+  // Stop currently playing audio immediately.
+  stopCurrentAudio();
+
+  let audioBlob;
+
+  try {
+    audioBlob = await generateAudio(
       cleanText,
       languageCode
     );
+  } catch (error) {
+    // Do not swallow the error.
+    // The caller can decide how to handle/log it.
+    throw error;
+  }
+
+  /*
+   * While the audio was being generated, another
+   * speech request may have started.
+   *
+   * If so, this audio is stale and must never play.
+   */
+  if (generation !== speechGeneration) {
+    return;
+  }
 
   const objectUrl =
     URL.createObjectURL(audioBlob);
+
+  // A newer speech request could theoretically start
+  // between the check above and audio creation.
+  if (generation !== speechGeneration) {
+    URL.revokeObjectURL(objectUrl);
+    return;
+  }
 
   currentObjectUrl = objectUrl;
 
@@ -125,8 +163,10 @@ export async function speakText(
     new Audio(objectUrl);
 
   /*
-   * 1.0 = normal browser volume.
-   * 1.25 gives the kiosk a little more presence.
+   * Normal browser volume.
+   *
+   * Do not artificially amplify through Web Audio;
+   * that can introduce clipping/distortion.
    */
   audio.volume = 1.0;
 
@@ -157,6 +197,24 @@ export async function speakText(
     throw error;
   }
 
+  /*
+   * Another request could have started while
+   * audio.play() was being resolved.
+   *
+   * Stop this audio if it has become stale.
+   */
+  if (generation !== speechGeneration) {
+    audio.pause();
+    audio.currentTime = 0;
+
+    cleanup(
+      audio,
+      objectUrl
+    );
+
+    return;
+  }
+
   return audio;
 }
 
@@ -180,7 +238,7 @@ function cleanup(
   );
 }
 
-export function stopSpeech() {
+function stopCurrentAudio() {
   if (currentAudio) {
     currentAudio.pause();
     currentAudio.currentTime = 0;
@@ -194,4 +252,16 @@ export function stopSpeech() {
 
     currentObjectUrl = null;
   }
+}
+
+export function stopSpeech() {
+  /*
+   * Invalidate all pending async speech.
+   *
+   * This is different from merely stopping the
+   * currently playing Audio element.
+   */
+  speechGeneration++;
+
+  stopCurrentAudio();
 }

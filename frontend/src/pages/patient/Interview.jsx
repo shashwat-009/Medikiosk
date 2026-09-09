@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useKiosk } from "../../context/KioskContext";
@@ -11,6 +11,11 @@ import {
 
 import { createResponse } from "../../services/responseService";
 
+import {
+  speakText,
+  stopSpeech,
+} from "../../services/ttsService";
+
 import ProgressTracker from "../../components/kiosk/ProgressTracker";
 import VoiceButton from "../../components/kiosk/VoiceButton";
 import TouchOptions from "../../components/kiosk/TouchOptions";
@@ -18,7 +23,6 @@ import RedFlagOverlay from "../../components/kiosk/RedFlagOverlay";
 import InterviewQuestion from "../../components/patient/InterviewQuestion";
 
 import "./Interview.css";
-
 
 export default function Interview() {
   const navigate = useNavigate();
@@ -63,7 +67,6 @@ export default function Interview() {
   const [questionNumber, setQuestionNumber] =
     useState(1);
 
-
   /*
    * ============================================================
    * Helpers
@@ -82,7 +85,6 @@ export default function Interview() {
     );
   }
 
-
   function getQuestionId(question) {
     if (!question) {
       return null;
@@ -94,7 +96,6 @@ export default function Interview() {
       null
     );
   }
-
 
   function formatError(errorValue) {
     if (!errorValue) {
@@ -134,6 +135,65 @@ export default function Interview() {
     return String(errorValue);
   }
 
+  /*
+   * ============================================================
+   * Current question text
+   * ============================================================
+   */
+
+  const displayQuestion =
+    conversationStarted
+      ? getQuestionText(currentQuestion)
+      : translate(
+          language,
+          "interview.questions.chiefComplaint"
+        );
+
+  /*
+   * ============================================================
+   * Question TTS
+   *
+   * Automatically speaks the current question whenever
+   * the question changes.
+   * ============================================================
+   */
+
+  useEffect(() => {
+    const questionText =
+      displayQuestion?.trim();
+
+    if (!questionText) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function speakQuestion() {
+      try {
+        await speakText(
+          questionText,
+          language
+        );
+      } catch (error) {
+        if (!cancelled) {
+          console.warn(
+            "Question TTS failed:",
+            error
+          );
+        }
+      }
+    }
+
+    speakQuestion();
+
+    return () => {
+      cancelled = true;
+      stopSpeech();
+    };
+  }, [
+    displayQuestion,
+    language,
+  ]);
 
   /*
    * ============================================================
@@ -179,7 +239,6 @@ export default function Interview() {
       setChiefComplaint(
         complaint
       );
-
     } catch (err) {
       console.error(
         "Failed to start conversation:",
@@ -187,12 +246,10 @@ export default function Interview() {
       );
 
       throw err;
-
     } finally {
       setIsStarting(false);
     }
   }
-
 
   /*
    * ============================================================
@@ -205,7 +262,6 @@ export default function Interview() {
     setInputMode("listening");
     setInputType("voice");
   }
-
 
   async function handleVoiceResult(
     transcript
@@ -234,7 +290,6 @@ export default function Interview() {
     }
   }
 
-
   /*
    * ============================================================
    * Touch
@@ -247,7 +302,6 @@ export default function Interview() {
     setInputType("touch");
     setError("");
   }
-
 
   /*
    * ============================================================
@@ -264,7 +318,6 @@ export default function Interview() {
     setInputType("touch");
     setError("");
   }
-
 
   /*
    * ============================================================
@@ -334,7 +387,6 @@ export default function Interview() {
     return response;
   }
 
-
   /*
    * ============================================================
    * Continue
@@ -396,7 +448,6 @@ export default function Interview() {
         return;
       }
 
-
       /*
        * --------------------------------------------------------
        * Safety check
@@ -408,7 +459,6 @@ export default function Interview() {
           "No current question is available."
         );
       }
-
 
       /*
        * --------------------------------------------------------
@@ -426,7 +476,6 @@ export default function Interview() {
         type:
           inputType || "touch",
       });
-
 
       /*
        * --------------------------------------------------------
@@ -454,7 +503,6 @@ export default function Interview() {
             inputType || "touch",
         });
 
-
       /*
        * --------------------------------------------------------
        * Red flag
@@ -467,7 +515,6 @@ export default function Interview() {
         );
       }
 
-
       /*
        * --------------------------------------------------------
        * Conversation complete
@@ -478,10 +525,10 @@ export default function Interview() {
         result?.completed ||
         !result?.next_question
       ) {
+        stopSpeech();
         navigate("/documents");
         return;
       }
-
 
       /*
        * --------------------------------------------------------
@@ -510,12 +557,10 @@ export default function Interview() {
       setError(
         formatError(err)
       );
-
     } finally {
       setIsSubmitting(false);
     }
   }
-
 
   /*
    * ============================================================
@@ -531,26 +576,15 @@ export default function Interview() {
       return;
     }
 
+    stopSpeech();
     navigate("/consent");
   }
 
-
   /*
    * ============================================================
-   * Current question
+   * Touch options
    * ============================================================
    */
-
-  const displayQuestion =
-  conversationStarted
-    ? getQuestionText(
-        currentQuestion
-      )
-    : translate(
-        language,
-        "interview.questions.chiefComplaint"
-      );
-
 
   const hasTouchOptions =
     conversationStarted &&
@@ -558,7 +592,6 @@ export default function Interview() {
       currentQuestion?.options
     ) &&
     currentQuestion.options.length > 0;
-
 
   /*
    * ============================================================
@@ -573,6 +606,11 @@ export default function Interview() {
     return null;
   }
 
+  /*
+   * ============================================================
+   * Render
+   * ============================================================
+   */
 
   return (
     <main className="interview">
@@ -609,7 +647,6 @@ export default function Interview() {
 
         </header>
 
-
         {/* Intro */}
 
         <div className="interview__intro">
@@ -637,17 +674,45 @@ export default function Interview() {
 
         </div>
 
-
         {/* Main card */}
 
         <section className="interview__card">
 
-          <InterviewQuestion
-            question={
-              displayQuestion
-            }
-          />
+          <div className="interview__question-with-tts">
 
+            <InterviewQuestion
+              question={
+                displayQuestion
+              }
+            />
+
+            <button
+              type="button"
+              className="interview__listen-question"
+              data-no-tts
+              onClick={() =>
+                speakText(
+                  displayQuestion,
+                  language
+                )
+              }
+              disabled={
+                !displayQuestion ||
+                isStarting
+              }
+              aria-label={translate(
+                language,
+                "interview.listenQuestion"
+              )}
+            >
+              🔊{" "}
+              {translate(
+                language,
+                "interview.listenQuestion"
+              )}
+            </button>
+
+          </div>
 
           {/* Voice */}
 
@@ -699,7 +764,6 @@ export default function Interview() {
 
           </div>
 
-
           {/* Touch options */}
 
           {hasTouchOptions && (
@@ -724,7 +788,6 @@ export default function Interview() {
               }
             />
           )}
-
 
           {/* Text */}
 
@@ -762,7 +825,6 @@ export default function Interview() {
             </>
           )}
 
-
           {/* Answer */}
 
           {answer && (
@@ -782,7 +844,6 @@ export default function Interview() {
             </div>
           )}
 
-
           {/* Error */}
 
           {error && (
@@ -790,7 +851,6 @@ export default function Interview() {
               {error}
             </p>
           )}
-
 
           {/* Continue */}
 
@@ -802,7 +862,6 @@ export default function Interview() {
               onClick={
                 handleContinue
               }
-
               disabled={
                 isSubmitting ||
                 isStarting
@@ -831,7 +890,6 @@ export default function Interview() {
 
         </section>
 
-
         {/* Privacy */}
 
         <p className="interview__privacy">
@@ -843,14 +901,13 @@ export default function Interview() {
 
       </section>
 
-
       {/* Red flag */}
 
-     <RedFlagOverlay
-  flag={state.redFlag}
-  onClose={clearRedFlag}
-  language={language}
-/>
+      <RedFlagOverlay
+        flag={state.redFlag}
+        onClose={clearRedFlag}
+        language={language}
+      />
 
     </main>
   );
