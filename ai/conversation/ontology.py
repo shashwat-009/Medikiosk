@@ -124,6 +124,69 @@ def _field(
     )
 
 
+# ---------------------------------------------------------------------------
+# Shared general clinical history
+# ---------------------------------------------------------------------------
+
+
+GENERAL_HISTORY_FIELDS: tuple[ClinicalField, ...] = (
+    ClinicalField(
+        identifier="past_medical_history",
+        name="Past Medical History",
+        description="Previous medical conditions, diagnoses, or significant illnesses.",
+        data_type=ClinicalDataType.TEXT,
+        priority=1,
+    ),
+    ClinicalField(
+        identifier="past_surgical_history",
+        name="Past Surgical History",
+        description="Previous surgeries, procedures, or significant hospitalisations.",
+        data_type=ClinicalDataType.TEXT,
+        priority=2,
+    ),
+    ClinicalField(
+        identifier="current_medications",
+        name="Medication History",
+        description="Current medicines, regular treatments, or supplements being taken.",
+        data_type=ClinicalDataType.TEXT,
+        priority=3,
+    ),
+    ClinicalField(
+        identifier="allergies",
+        name="Allergies / Hypersensitivities",
+        description="Known medicine, food, or other allergies or hypersensitivities.",
+        data_type=ClinicalDataType.TEXT,
+        priority=4,
+    ),
+    ClinicalField(
+        identifier="family_history",
+        name="Family History",
+        description="Important illnesses or health conditions in close family members.",
+        data_type=ClinicalDataType.TEXT,
+        priority=5,
+    ),
+    ClinicalField(
+        identifier="personal_history",
+        name="Personal History",
+        description="Relevant lifestyle, occupation, tobacco, alcohol, diet, sleep, or other personal factors.",
+        data_type=ClinicalDataType.TEXT,
+        priority=6,
+    ),
+    ClinicalField(
+        identifier="review_of_systems",
+        name="Review of Systems",
+        description="Other symptoms not already covered in the current complaint history.",
+        data_type=ClinicalDataType.TEXT,
+        priority=7,
+    ),
+)
+
+GENERAL_HISTORY_FIELD_IDS: tuple[str, ...] = tuple(
+    field.identifier for field in GENERAL_HISTORY_FIELDS
+)
+
+
+
 def _build_ontologies() -> dict[ComplaintType, ComplaintOntology]:
     """Build the static ontology definitions."""
 
@@ -361,12 +424,36 @@ def _build_ontologies() -> dict[ComplaintType, ComplaintOntology]:
                 priority=7,
             ),
             _field(
+                "fever",
+                "Fever",
+                "Whether fever is present with the cough.",
+                ClinicalDataType.YES_NO,
+                ComplaintType.COUGH,
+                priority=8,
+            ),
+            _field(
+                "nocturnal_sweating",
+                "Nocturnal Sweating",
+                "Whether there is unusual sweating during the night.",
+                ClinicalDataType.YES_NO,
+                ComplaintType.COUGH,
+                priority=9,
+            ),
+            _field(
+                "dyspnea_grade",
+                "Breathing Difficulty",
+                "Reported grade of breathing difficulty associated with the cough.",
+                ClinicalDataType.SINGLE_CHOICE,
+                ComplaintType.COUGH,
+                priority=10,
+            ),
+            _field(
                 "associated_symptoms",
                 "Associated Symptoms",
                 "Other symptoms occurring with the cough.",
                 ClinicalDataType.MULTIPLE_CHOICE,
                 ComplaintType.COUGH,
-                priority=8,
+                priority=11,
             ),
             _field(
                 "aggravating_factors",
@@ -374,7 +461,7 @@ def _build_ontologies() -> dict[ComplaintType, ComplaintOntology]:
                 "Factors that make the cough worse.",
                 ClinicalDataType.MULTIPLE_CHOICE,
                 ComplaintType.COUGH,
-                priority=9,
+                priority=12,
             ),
         ),
     )
@@ -615,6 +702,12 @@ class OntologyRegistry:
             ) from exc
 
     @classmethod
+    def get_general_history_fields(cls) -> tuple[ClinicalField, ...]:
+        """Return shared general-history fields in deterministic order."""
+
+        return GENERAL_HISTORY_FIELDS
+
+    @classmethod
     def all(cls) -> tuple[ComplaintOntology, ...]:
         """Return all registered ontologies in deterministic order."""
         return tuple(_ONTOLOGIES.values())
@@ -632,6 +725,8 @@ __all__ = [
     "ClinicalField",
     "ComplaintOntology",
     "ComplaintType",
+    "GENERAL_HISTORY_FIELDS",
+    "GENERAL_HISTORY_FIELD_IDS",
     "OntologyRegistry",
     "get_ontology",
 ]

@@ -104,6 +104,9 @@ COUGH_FIELDS = (
     "sputum",
     "sputum_characteristics",
     "blood_presence",
+    "fever",
+    "nocturnal_sweating",
+    "dyspnea_grade",
     "associated_symptoms",
     "aggravating_factors",
 )
@@ -159,7 +162,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "fever_onset_en",
         "onset",
-        "When did the fever start?",
+        "When did the fever start, and about how long have you had it?",
         QuestionLanguage.ENGLISH,
         answer_type="text",
         priority=10,
@@ -167,7 +170,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "fever_onset_hi",
         "onset",
-        "बुखार कब शुरू हुआ?",
+        "बुखार कब शुरू हुआ और आपको यह लगभग कितने समय से है?",
         QuestionLanguage.HINDI,
         answer_type="text",
         priority=10,
@@ -175,7 +178,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "fever_onset_bn",
         "onset",
-        "জ্বর কখন শুরু হয়েছে?",
+        "জ্বর কখন শুরু হয়েছে এবং প্রায় কতদিন ধরে এটি আছে?",
         QuestionLanguage.BENGALI,
         answer_type="text",
         priority=10,
@@ -183,7 +186,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "fever_onset_mr",
         "onset",
-        "ताप कधी सुरू झाला?",
+        "ताप कधी सुरू झाला आणि तुम्हाला हा त्रास साधारण किती दिवसांपासून आहे?",
         QuestionLanguage.MARATHI,
         answer_type="text",
         priority=10,
@@ -844,7 +847,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "cough_onset_en",
         "onset",
-        "When did the cough start?",
+        "When did the cough start, and about how long have you had it?",
         QuestionLanguage.ENGLISH,
         answer_type="text",
         priority=10,
@@ -852,7 +855,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "cough_onset_hi",
         "onset",
-        "खाँसी कब शुरू हुई?",
+        "खाँसी कब शुरू हुई और आपको यह लगभग कितने समय से है?",
         QuestionLanguage.HINDI,
         answer_type="text",
         priority=10,
@@ -860,7 +863,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "cough_onset_bn",
         "onset",
-        "কাশি কখন শুরু হয়েছে?",
+        "কাশি কখন শুরু হয়েছে এবং প্রায় কতদিন ধরে আপনার কাশি আছে?",
         QuestionLanguage.BENGALI,
         answer_type="text",
         priority=10,
@@ -868,7 +871,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "cough_onset_mr",
         "onset",
-        "खोकला कधी सुरू झाला?",
+        "खोकला कधी सुरू झाला आणि तुम्हाला तो साधारण किती दिवसांपासून आहे?",
         QuestionLanguage.MARATHI,
         answer_type="text",
         priority=10,
@@ -1092,6 +1095,118 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
         QuestionLanguage.MARATHI,
         answer_type="boolean",
         priority=70,
+    ),
+
+    # ===================================================================
+    # FEVER
+    # ===================================================================
+    Question(
+        "cough_fever_en",
+        "fever",
+        "Do you have a fever along with the cough?",
+        QuestionLanguage.ENGLISH,
+        answer_type="boolean",
+        priority=80,
+    ),
+    Question(
+        "cough_fever_hi",
+        "fever",
+        "क्या खाँसी के साथ आपको बुखार भी है?",
+        QuestionLanguage.HINDI,
+        answer_type="boolean",
+        priority=80,
+    ),
+    Question(
+        "cough_fever_bn",
+        "fever",
+        "কাশির সঙ্গে কি আপনার জ্বরও আছে?",
+        QuestionLanguage.BENGALI,
+        answer_type="boolean",
+        priority=80,
+    ),
+    Question(
+        "cough_fever_mr",
+        "fever",
+        "खोकल्यासोबत तुम्हाला तापही आहे का?",
+        QuestionLanguage.MARATHI,
+        answer_type="boolean",
+        priority=80,
+    ),
+
+    # ===================================================================
+    # NOCTURNAL SWEATING
+    # ===================================================================
+    Question(
+        "cough_nocturnal_sweating_en",
+        "nocturnal_sweating",
+        "Do you have unusual sweating at night?",
+        QuestionLanguage.ENGLISH,
+        answer_type="boolean",
+        priority=90,
+    ),
+    Question(
+        "cough_nocturnal_sweating_hi",
+        "nocturnal_sweating",
+        "क्या आपको रात में असामान्य रूप से पसीना आता है?",
+        QuestionLanguage.HINDI,
+        answer_type="boolean",
+        priority=90,
+    ),
+    Question(
+        "cough_nocturnal_sweating_bn",
+        "nocturnal_sweating",
+        "রাতে কি আপনার অস্বাভাবিকভাবে ঘাম হয়?",
+        QuestionLanguage.BENGALI,
+        answer_type="boolean",
+        priority=90,
+    ),
+    Question(
+        "cough_nocturnal_sweating_mr",
+        "nocturnal_sweating",
+        "तुम्हाला रात्री असामान्यपणे घाम येतो का?",
+        QuestionLanguage.MARATHI,
+        answer_type="boolean",
+        priority=90,
+    ),
+
+    # ===================================================================
+    # DYSPNEA GRADE
+    # ===================================================================
+    Question(
+        "cough_dyspnea_grade_en",
+        "dyspnea_grade",
+        "How would you describe your breathing difficulty?",
+        QuestionLanguage.ENGLISH,
+        answer_type="single_choice",
+        options=("No breathing difficulty", "Mild", "Moderate", "Severe"),
+        priority=100,
+    ),
+    Question(
+        "cough_dyspnea_grade_hi",
+        "dyspnea_grade",
+        "सांस लेने में आपकी परेशानी कितनी है?",
+        QuestionLanguage.HINDI,
+        answer_type="single_choice",
+        options=("सांस लेने में परेशानी नहीं", "हल्की", "मध्यम", "गंभीर"),
+        priority=100,
+    ),
+    Question(
+        "cough_dyspnea_grade_bn",
+        "dyspnea_grade",
+        "আপনার শ্বাসকষ্ট কতটা?",
+        QuestionLanguage.BENGALI,
+        answer_type="single_choice",
+        options=("শ্বাসকষ্ট নেই", "হালকা", "মাঝারি", "তীব্র"),
+        priority=100,
+    ),
+    Question(
+        "cough_dyspnea_grade_mr",
+        "dyspnea_grade",
+        "तुमची श्वास घेण्याची अडचण किती आहे?",
+        QuestionLanguage.MARATHI,
+        answer_type="single_choice",
+        options=("श्वास घेण्यास त्रास नाही", "सौम्य", "मध्यम", "तीव्र"),
+        priority=100,
     ),
 
     # ===================================================================
@@ -1534,7 +1649,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "abdominal_pain_onset_en",
         "onset",
-        "When did the abdominal pain start?",
+        "When did the abdominal pain start, and about how long have you had it?",
         QuestionLanguage.ENGLISH,
         answer_type="text",
         priority=10,
@@ -1542,7 +1657,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "abdominal_pain_onset_hi",
         "onset",
-        "पेट में दर्द कब शुरू हुआ?",
+        "पेट में दर्द कब शुरू हुआ और आपको यह लगभग कितने समय से है?",
         QuestionLanguage.HINDI,
         answer_type="text",
         priority=10,
@@ -1550,7 +1665,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "abdominal_pain_onset_bn",
         "onset",
-        "পেটে ব্যথা কখন শুরু হয়েছে?",
+        "পেটে ব্যথা কখন শুরু হয়েছে এবং প্রায় কতদিন ধরে আপনার পেটে ব্যথা আছে?",
         QuestionLanguage.BENGALI,
         answer_type="text",
         priority=10,
@@ -1558,7 +1673,7 @@ def _build_question_bank() -> dict[str, tuple[Question, ...]]:
     Question(
         "abdominal_pain_onset_mr",
         "onset",
-        "पोटदुखी कधी सुरू झाली?",
+        "पोटदुखी कधी सुरू झाली आणि तुम्हाला हे साधारण किती दिवसांपासून आहे?",
         QuestionLanguage.MARATHI,
         answer_type="text",
         priority=10,
@@ -1959,6 +2074,101 @@ _QUESTION_BANK = _build_question_bank()
 
 
 # ---------------------------------------------------------------------------
+# Shared general clinical history questions
+# ---------------------------------------------------------------------------
+
+
+GENERAL_HISTORY_FIELDS = (
+    "past_medical_history",
+    "past_surgical_history",
+    "current_medications",
+    "allergies",
+    "family_history",
+    "personal_history",
+    "review_of_systems",
+)
+
+
+def _build_general_history_question_bank() -> tuple[Question, ...]:
+    """Build shared general-history questions in all supported languages."""
+
+    content = {
+        "past_medical_history": {
+            QuestionLanguage.ENGLISH: "Have you ever been diagnosed with any important medical conditions or illnesses?",
+            QuestionLanguage.HINDI: "क्या आपको कभी कोई महत्वपूर्ण बीमारी या स्वास्थ्य समस्या बताई गई है?",
+            QuestionLanguage.BENGALI: "আপনার কি কখনও কোনো গুরুত্বপূর্ণ রোগ বা স্বাস্থ্যসমস্যা ধরা পড়েছে?",
+            QuestionLanguage.MARATHI: "तुम्हाला कधी कोणता महत्त्वाचा आजार किंवा आरोग्याची समस्या असल्याचे निदान झाले आहे का?",
+        },
+        "past_surgical_history": {
+            QuestionLanguage.ENGLISH: "Have you ever had any surgery, major procedure, or significant hospitalisation?",
+            QuestionLanguage.HINDI: "क्या आपकी कभी कोई सर्जरी, बड़ी प्रक्रिया या महत्वपूर्ण अस्पताल में भर्ती हुई है?",
+            QuestionLanguage.BENGALI: "আপনার কি কখনও কোনো অস্ত্রোপচার, বড় চিকিৎসা-প্রক্রিয়া বা গুরুত্বপূর্ণ কারণে হাসপাতালে ভর্তি হতে হয়েছে?",
+            QuestionLanguage.MARATHI: "तुमच्यावर कधी शस्त्रक्रिया, मोठी प्रक्रिया झाली आहे किंवा महत्त्वासाठी रुग्णालयात दाखल व्हावे लागले आहे का?",
+        },
+        "current_medications": {
+            QuestionLanguage.ENGLISH: "Are you currently taking any medicines, regular treatments, or supplements?",
+            QuestionLanguage.HINDI: "क्या आप अभी कोई दवा, नियमित उपचार या सप्लीमेंट ले रहे हैं?",
+            QuestionLanguage.BENGALI: "আপনি কি বর্তমানে কোনো ওষুধ, নিয়মিত চিকিৎসা বা সাপ্লিমেন্ট নিচ্ছেন?",
+            QuestionLanguage.MARATHI: "तुम्ही सध्या कोणतीही औषधे, नियमित उपचार किंवा सप्लिमेंट घेत आहात का?",
+        },
+        "allergies": {
+            QuestionLanguage.ENGLISH: "Do you have any known medicine, food, or other allergies or hypersensitivities?",
+            QuestionLanguage.HINDI: "क्या आपको किसी दवा, भोजन या किसी अन्य चीज़ से एलर्जी या अतिसंवेदनशीलता है?",
+            QuestionLanguage.BENGALI: "কোনো ওষুধ, খাবার বা অন্য কোনো কিছুর প্রতি আপনার কি অ্যালার্জি বা অতিসংবেদনশীলতা আছে?",
+            QuestionLanguage.MARATHI: "तुम्हाला कोणत्या औषध, अन्नपदार्थ किंवा इतर कोणत्याही गोष्टीची ऍलर्जी किंवा अतिसंवेदनशीलता आहे का?",
+        },
+        "family_history": {
+            QuestionLanguage.ENGLISH: "Does anyone in your close family have any important health conditions that doctors should know about?",
+            QuestionLanguage.HINDI: "आपके करीबी परिवार में किसी को ऐसी महत्वपूर्ण बीमारी है जिसके बारे में डॉक्टर को जानना चाहिए?",
+            QuestionLanguage.BENGALI: "আপনার নিকট পরিবারের কারও কি এমন গুরুত্বপূর্ণ স্বাস্থ্যসমস্যা আছে যা ডাক্তারের জানা উচিত?",
+            QuestionLanguage.MARATHI: "तुमच्या जवळच्या कुटुंबातील कोणाला डॉक्टरांनी जाणून घ्यावे अशी महत्त्वाची आरोग्य समस्या आहे का?",
+        },
+        "personal_history": {
+            QuestionLanguage.ENGLISH: "Is there anything important about your daily lifestyle, work, tobacco or alcohol use, diet, or sleep that we should know?",
+            QuestionLanguage.HINDI: "आपकी रोज़मर्रा की जीवनशैली, काम, तंबाकू या शराब का सेवन, खान-पान या नींद के बारे में कोई महत्वपूर्ण बात है जो हमें जाननी चाहिए?",
+            QuestionLanguage.BENGALI: "আপনার দৈনন্দিন জীবনযাপন, কাজ, তামাক বা অ্যালকোহল ব্যবহার, খাদ্যাভ্যাস বা ঘুম সম্পর্কে এমন কিছু গুরুত্বপূর্ণ আছে কি যা আমাদের জানা উচিত?",
+            QuestionLanguage.MARATHI: "तुमची दैनंदिन जीवनशैली, काम, तंबाखू किंवा मद्यपान, आहार किंवा झोपेबद्दल आम्हाला माहिती असावी अशी काही महत्त्वाची गोष्ट आहे का?",
+        },
+        "review_of_systems": {
+            QuestionLanguage.ENGLISH: "Apart from what we have discussed, are you experiencing any other symptoms or changes in your body?",
+            QuestionLanguage.HINDI: "अब तक बताई गई बातों के अलावा, क्या आपको शरीर में कोई और लक्षण या बदलाव महसूस हो रहा है?",
+            QuestionLanguage.BENGALI: "এতক্ষণ যে বিষয়গুলি নিয়ে কথা হয়েছে তার বাইরে, আপনার শরীরে কি অন্য কোনো উপসর্গ বা পরিবর্তন হচ্ছে?",
+            QuestionLanguage.MARATHI: "आतापर्यंत चर्चा केलेल्या गोष्टींव्यतिरिक्त, तुम्हाला शरीरात इतर कोणती लक्षणे किंवा बदल जाणवत आहेत का?",
+        },
+    }
+
+    questions: list[Question] = []
+    priorities = {
+        "past_medical_history": 10,
+        "past_surgical_history": 20,
+        "current_medications": 30,
+        "allergies": 40,
+        "family_history": 50,
+        "personal_history": 60,
+        "review_of_systems": 70,
+    }
+
+    for field_id in GENERAL_HISTORY_FIELDS:
+        for language in QuestionLanguage:
+            suffix = language.value
+            questions.append(
+                Question(
+                    f"general_history_{field_id}_{suffix}",
+                    field_id,
+                    content[field_id][language],
+                    language,
+                    answer_type="text",
+                    priority=priorities[field_id],
+                )
+            )
+
+    return tuple(questions)
+
+
+_GENERAL_HISTORY_QUESTIONS = _build_general_history_question_bank()
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -2035,6 +2245,13 @@ def get_questions_for_field(
         if question.field_id == field_key
     )
 
+    if not questions and field_key in GENERAL_HISTORY_FIELDS:
+        questions = tuple(
+            question
+            for question in _GENERAL_HISTORY_QUESTIONS
+            if question.field_id == field_key
+        )
+
     if not questions:
         raise ValueError(
             f"Unknown field {field!r} for complaint {complaint!r}"
@@ -2063,6 +2280,10 @@ def get_question(question_id: str) -> Question:
         for question in questions:
             if question.question_id == question_id:
                 return question
+
+    for question in _GENERAL_HISTORY_QUESTIONS:
+        if question.question_id == question_id:
+            return question
 
     raise ValueError(f"Unknown question ID: {question_id!r}")
 
@@ -2145,6 +2366,43 @@ def validate_question_bank() -> None:
                 f"{sorted(missing)}"
             )
 
+    shared_actual_fields = {
+        question.field_id for question in _GENERAL_HISTORY_QUESTIONS
+    }
+    shared_missing = set(GENERAL_HISTORY_FIELDS) - shared_actual_fields
+    if shared_missing:
+        raise ValueError(
+            "General history question bank is missing fields: "
+            f"{sorted(shared_missing)}"
+        )
+
+    existing_question_ids = {
+        question.question_id
+        for questions in _QUESTION_BANK.values()
+        for question in questions
+    }
+    shared_question_ids = {
+        question.question_id for question in _GENERAL_HISTORY_QUESTIONS
+    }
+    duplicate_shared_ids = existing_question_ids & shared_question_ids
+    if duplicate_shared_ids:
+        raise ValueError(
+            "Duplicate question IDs between complaint and general history banks: "
+            f"{sorted(duplicate_shared_ids)}"
+        )
+
+    for field_id in GENERAL_HISTORY_FIELDS:
+        language_count = sum(
+            1
+            for question in _GENERAL_HISTORY_QUESTIONS
+            if question.field_id == field_id
+        )
+        if language_count != len(QuestionLanguage):
+            raise ValueError(
+                f"General history field {field_id!r} must have exactly "
+                f"{len(QuestionLanguage)} language variants."
+            )
+
 
 # Validate the static registry immediately.
 validate_question_bank()
@@ -2212,6 +2470,7 @@ def _normalise_language(
 __all__ = [
     "Question",
     "QuestionLanguage",
+    "GENERAL_HISTORY_FIELDS",
     "get_question_bank",
     "get_questions_for_complaint",
     "get_questions_for_field",

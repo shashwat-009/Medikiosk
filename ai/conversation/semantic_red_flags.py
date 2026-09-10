@@ -35,9 +35,9 @@ SEMANTIC_RED_FLAG_THRESHOLD = 0.70
 CATEGORY_RELEVANCE_ANCHORS: dict[str, tuple[str, ...]] = {
     "severe_breathing_difficulty": (
         "breathe", "breathing", "breath", "shortness of breath", "air",
-        "saans", "sans", "dam ghut", "dam", "hawa",
-        "सांस", "साँस", "श्वास", "दम", "हवा",
-        "শ্বাস", "দম",
+        "saans", "sans", "dam ghut", "dam", "hawa", "gasping", "gasp", "suffocating", "air hunger",
+        "सांस", "साँस", "श्वास", "दम", "हवा", "हांफ", "घुटन",
+        "শ্বাস", "দম", "হাঁপ", "দমবন্ধ",
         "श्वास", "श्वास घे",
     ),
     "loss_of_consciousness": (
@@ -95,6 +95,213 @@ def _contains_anchor(text: str, anchor: str) -> bool:
         r"(?<!\w)" + re.escape(normalized_anchor) + r"(?!\w)",
         normalized,
     ) is not None
+
+
+# ----------------------------------------------------------------------
+# Conservative category-aware negation
+# ----------------------------------------------------------------------
+# Sentence embeddings measure similarity, not truth. A denial such as
+# "no breathing difficulty" can therefore be highly similar to a positive
+# emergency concept. These guards run before semantic detection and are
+# deliberately category-specific so generic words such as "not" do not
+# suppress genuine emergencies such as "I am not able to breathe".
+
+_CATEGORY_NEGATION_PATTERNS: dict[str, tuple[str, ...]] = {
+    "severe_breathing_difficulty": (
+        r"\bno breathing difficulty\b",
+        r"\bno difficulty breathing\b",
+        r"\bno trouble breathing\b",
+        r"\bno problem breathing\b",
+        r"\bno breathing problems?\b",
+        r"\bno shortness of breath\b",
+        r"\bwithout breathing difficulty\b",
+        r"\bwithout difficulty breathing\b",
+        r"\bwithout trouble breathing\b",
+        r"\bwithout any breathing problems?\b",
+        r"\bi do not have (?:any )?(?:breathing difficulty|difficulty breathing|trouble breathing|breathing problems?)\b",
+        r"\bi don't have (?:any )?(?:breathing difficulty|difficulty breathing|trouble breathing|breathing problems?)\b",
+        r"\bi do not experience (?:any )?(?:breathing difficulty|difficulty breathing|trouble breathing)\b",
+        r"\bi don't experience (?:any )?(?:breathing difficulty|difficulty breathing|trouble breathing)\b",
+        r"\bi am not having (?:any )?(?:breathing difficulty|difficulty breathing|trouble breathing)\b",
+        r"\bi'm not having (?:any )?(?:breathing difficulty|difficulty breathing|trouble breathing)\b",
+        r"\bbreathing is normal\b",
+        r"\bbreathing is fine\b",
+        r"\bi can breathe normally\b",
+        r"\bsaans lene mein (?:koi )?(?:dikkat|mushkil|pareshani) nahi\b",
+        r"\bsaans lene me (?:koi )?(?:dikkat|mushkil|pareshani) nahi\b",
+        r"\bsaans ki (?:koi )?(?:dikkat|problem|pareshani) nahi\b",
+        r"\bसांस लेने में (?:कोई )?(?:दिक्कत|मुश्किल|परेशानी) नहीं\b",
+        r"\bसाँस लेने में (?:कोई )?(?:दिक्कत|मुश्किल|परेशानी) नहीं\b",
+        r"\bश्वास घेण्यास (?:काही )?(?:त्रास|अडचण) नाही\b",
+        r"\bশ্বাস নিতে (?:কোনও |কোনো )?(?:কষ্ট|অসুবিধা) নেই\b",
+    ),
+    "loss_of_consciousness": (
+        r"\bno loss of consciousness\b",
+        r"\bdid not lose consciousness\b",
+        r"\bdidn't lose consciousness\b",
+        r"\bdo not lose consciousness\b",
+        r"\bdon't lose consciousness\b",
+        r"\bnever lost consciousness\b",
+        r"\bdid not faint\b",
+        r"\bdidn't faint\b",
+        r"\bnever fainted\b",
+        r"\bdid not pass out\b",
+        r"\bdidn't pass out\b",
+        r"\bnever passed out\b",
+        r"\bno fainting\b",
+        r"\bbehosh nahi hua\b",
+        r"\bबेहोश नहीं हुआ\b",
+        r"\bबेहोश नहीं हुई\b",
+    ),
+    "severe_chest_pain": (
+        r"\bno chest pain\b",
+        r"\bno pain in (?:my )?chest\b",
+        r"\bi do not have (?:any )?chest pain\b",
+        r"\bi don't have (?:any )?chest pain\b",
+        r"\bmy chest does not hurt\b",
+        r"\bmy chest doesn't hurt\b",
+        r"\bseene mein (?:koi )?dard nahi\b",
+        r"\bseene me (?:koi )?dard nahi\b",
+        r"\bसीने में (?:कोई )?दर्द नहीं\b",
+        r"\bछाती में (?:कोई )?दर्द नहीं\b",
+    ),
+    "severe_bleeding": (
+        r"\bno bleeding\b",
+        r"\bnot bleeding\b",
+        r"\bthere is no bleeding\b",
+        r"\bi am not bleeding\b",
+        r"\bi'm not bleeding\b",
+        r"\bno blood is coming out\b",
+        r"\bno blood\b",
+        r"\bkhoon nahi beh raha\b",
+        r"\bखून नहीं बह रहा\b",
+        r"\bकोई रक्तस्राव नहीं\b",
+        r"\bকোনও রক্তপাত হচ্ছে না\b",
+        r"\bकोणताही रक्तस्राव नाही\b",
+    ),
+    "sudden_weakness_or_paralysis": (
+        r"\bno weakness\b",
+        r"\bnot weak\b",
+        r"\bno numbness\b",
+        r"\bnot numb\b",
+        r"\bno paralysis\b",
+        r"\bnot paralyzed\b",
+        r"\bi do not have (?:any )?(?:weakness|numbness|paralysis)\b",
+        r"\bi don't have (?:any )?(?:weakness|numbness|paralysis)\b",
+        r"\bkamzori nahi hai\b",
+        r"\bsunn nahi hai\b",
+        r"\bकमजोरी नहीं है\b",
+        r"\bसुन्न नहीं है\b",
+    ),
+    "gastrointestinal_bleeding": (
+        r"\bno blood in (?:my )?stool\b",
+        r"\bno blood in (?:my )?stools\b",
+        r"\bno blood in (?:my )?vomit\b",
+        r"\bno blood in (?:my )?bowel movements?\b",
+        r"\bno bloody stool\b",
+        r"\bmy stool is not bloody\b",
+        r"\bmy stools are not bloody\b",
+        r"\bmy stool is not black\b",
+        r"\bstool mein khoon nahi\b",
+        r"\bstool me khoon nahi\b",
+        r"\bmal mein khoon nahi\b",
+        r"\bमल में खून नहीं\b",
+        r"\bमल में रक्त नहीं\b",
+        r"\bপায়খানায় রক্ত নেই\b",
+        r"\bमलामध्ये रक्त नाही\b",
+    ),
+}
+
+
+def _is_explicit_category_negation(text: str, category: str | None) -> bool:
+    """Return True when text explicitly denies a supported red-flag category."""
+    if not category:
+        return False
+
+    normalized = " ".join(text.casefold().split())
+    return any(
+        re.search(pattern, normalized) is not None
+        for pattern in _CATEGORY_NEGATION_PATTERNS.get(category, ())
+    )
+
+
+def _has_positive_category_language(text: str, category: str | None) -> bool:
+    """Return True for a small set of explicit positive emergency statements."""
+    if not category:
+        return False
+
+    normalized = " ".join(text.casefold().split())
+    positive_patterns: dict[str, tuple[str, ...]] = {
+        "severe_breathing_difficulty": (
+            r"\bcannot breathe\b",
+            r"\bcan't breathe\b",
+            r"\bunable to breathe\b",
+            r"\bstruggling to breathe\b",
+            r"\bgasping\b",
+            r"\bgasping for (?:air|breath)\b",
+            r"\bsuffocating\b",
+            r"\bair hunger\b",
+            r"\bsaans nahi aa rahi\b",
+            r"\bदम घुट रहा\b",
+            r"\bसांस नहीं आ रही\b",
+            r"\bश्वास घेता येत नाही\b",
+        ),
+        "loss_of_consciousness": (
+            r"\bpassed out\b",
+            r"\bfainted\b",
+            r"\blost consciousness\b",
+            r"\bblack(ed)? out\b",
+            r"\bबेहोश हो गया\b",
+            r"\bबेहोश हो गई\b",
+        ),
+        "severe_chest_pain": (
+            r"\bsevere chest pain\b",
+            r"\bcrushing chest pain\b",
+            r"\bextreme chest pain\b",
+            r"\bunbearable chest pain\b",
+            r"\bbahut (?:tez|zyada) seene (?:mein|me) dard\b",
+            r"\bबहुत तेज सीने में दर्द\b",
+        ),
+        "severe_bleeding": (
+            r"\bbleeding heavily\b",
+            r"\bbleeding a lot\b",
+            r"\bsevere bleeding\b",
+            r"\bbleeding will not stop\b",
+            r"\bbahut zyada khoon beh raha\b",
+            r"\bबहुत ज्यादा खून बह रहा\b",
+        ),
+        "sudden_weakness_or_paralysis": (
+            r"\bsuddenly cannot move\b",
+            r"\bsudden paralysis\b",
+            r"\bsudden weakness\b",
+            r"\bone side .*weak\b",
+            r"\bachanak kamzori\b",
+            r"\bअचानक कमजोरी\b",
+        ),
+        "gastrointestinal_bleeding": (
+            r"\bblood in my stool\b",
+            r"\bvomiting blood\b",
+            r"\bblack tarry stool\b",
+            r"\bस्टूल में खून\b",
+            r"\bमल में खून\b",
+        ),
+    }
+    for pattern in positive_patterns.get(category, ()):
+        for match in re.finditer(pattern, normalized):
+            before = normalized[:match.start()].rstrip()
+            # Reject only when the matched occurrence is immediately denied.
+            # Do not use a blanket `not` rule: e.g. "I am not able to breathe"
+            # remains positive.
+            denial_before = (
+                r"(?:\bno\s*|\bwithout\s*|\bdid not\s*|\bdidn't\s*|"
+                r"\bdo not\s*|\bdon't\s*|\bdoes not\s*|\bdoesn't\s*|"
+                r"\bnever\s*|\bnahi\s*|\bnahin\s*)$"
+            )
+            if re.search(denial_before, before):
+                continue
+            return True
+
+    return False
 
 
 def _has_category_relevance(text: str, category: str | None) -> bool:
@@ -353,6 +560,18 @@ class SemanticRedFlagDetector:
             category
             for category in self._category_indices
             if _has_category_relevance(normalized_text, category)
+        ]
+
+        # Explicit denials must be removed before similarity scoring. A denial
+        # can otherwise receive a high embedding similarity to the positive
+        # concept it negates.
+        relevant_categories = [
+            category
+            for category in relevant_categories
+            if not (
+                _is_explicit_category_negation(normalized_text, category)
+                and not _has_positive_category_language(normalized_text, category)
+            )
         ]
 
         if not relevant_categories:

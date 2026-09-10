@@ -45,6 +45,9 @@ EXPECTED_FIELDS = {
         "blood_presence",
         "associated_symptoms",
         "aggravating_factors",
+        "fever",
+"nocturnal_sweating",
+"dyspnea_grade",
     },
     ComplaintType.HEADACHE: {
         "onset",

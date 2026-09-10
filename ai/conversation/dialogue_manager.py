@@ -25,6 +25,7 @@ from typing import Any
 from ai.conversation.adaptive_questioning import (
     AdaptiveQuestioning,
     NextQuestionResult,
+    answer_establishes_persistent_duration,
 )
 from ai.conversation.ayush_mode import AyushMode
 from ai.conversation.dialogue_state import (
@@ -71,7 +72,6 @@ class _AyushQuestionBankAdapter:
 
     def __init__(self, ayush_mode: AyushMode) -> None:
         self.ayush_mode = ayush_mode
-        
 
     def get_questions_for_field(
         self,
@@ -140,10 +140,11 @@ class DialogueManager:
 
         self.state = state
         self.ayush_mode = ayush_mode
+
         if self.ayush_mode is not None:
             self.state.allowed_fields = tuple(
                 self.ayush_mode.fields
-                )
+            )
 
         self.language = (
             language
@@ -182,12 +183,7 @@ class DialogueManager:
         red_flag_detector: RedFlagDetector | None = None,
         ayush_mode: AyushMode | None = None,
     ) -> "DialogueManager":
-        """
-        Create a new conversation for a supported complaint.
-
-        ``ayush_mode`` is optional. Existing callers that do not provide
-        it continue to use the standard clinical history flow.
-        """
+        """Create a new conversation for a supported complaint."""
 
         state = DialogueState.create(complaint)
 
@@ -208,12 +204,7 @@ class DialogueManager:
         return self.get_next_question()
 
     def get_next_question(self) -> Any | None:
-        """
-        Get the next question in the configured language.
-
-        AdaptiveQuestioning chooses the field.
-        The configured question source supplies the question.
-        """
+        """Get the next question in the configured language."""
 
         result: NextQuestionResult = (
             self._questioning.get_next_question(
@@ -307,7 +298,14 @@ class DialogueManager:
 
         self.state.record_answer(answer)
 
-        # Keep AYUSH-specific values synchronized when AYUSH mode is active.
+        # If onset already contains a usable duration, store the same answer
+        # in the structured duration field. AdaptiveQuestioning will therefore
+        # skip the redundant duration question safely.
+        self._capture_explicit_duration_from_onset(
+            field_id=field_id,
+            value=value,
+        )
+
         if self.ayush_mode is not None:
             self.ayush_mode.update_field(
                 field_id,
@@ -446,6 +444,50 @@ class DialogueManager:
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+
+    def _capture_explicit_duration_from_onset(
+        self,
+        *,
+        field_id: str,
+        value: Any,
+    ) -> None:
+        """
+        Store a duration derived from an onset answer only when the shared
+        duration parser confirms that the answer explicitly states a duration.
+        """
+
+        field_key = (
+            field_id.strip().lower()
+            if isinstance(field_id, str)
+            else ""
+        )
+
+        complaint = str(
+            getattr(self.state, "complaint", "")
+        ).strip().lower()
+
+        persistent_duration_complaints = {
+            "fever",
+            "cough",
+            "abdominal_pain",
+        }
+
+        if (
+            field_key != "onset"
+            or complaint not in persistent_duration_complaints
+        ):
+            return
+
+        # Uses the exact parser that decides whether the question is skipped.
+        if not answer_establishes_persistent_duration(value):
+            return
+
+        if self.state.is_field_missing("duration"):
+            self.state.update_field(
+                "duration",
+                value,
+                source="derived_from_explicit_onset_duration",
+            )
 
     def _record_patient_turn(
         self,

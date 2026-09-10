@@ -76,6 +76,11 @@ RED_FLAG_PATTERNS: dict[str, tuple[str, ...]] = {
         "severe difficulty breathing",
         "shortness of breath",
         "severe shortness of breath",
+        "gasping for air",
+        "gasping for breath",
+        "suffocating",
+        "i am suffocating",
+        "air hunger",
 
         # Hindi - Hinglish
         "saans nahi aa rahi",
@@ -110,6 +115,8 @@ RED_FLAG_PATTERNS: dict[str, tuple[str, ...]] = {
         "श्वास घेण्यास खूप त्रास होत आहे",
         "श्वास घेण्यास अडचण होत आहे",
         "खूप श्वास घेण्यास त्रास होत आहे",
+        "श्वास घेताना खूप त्रास होत आहे",
+        "मला श्वास घेता येत नाही",
     ),
 
     # ==================================================================
@@ -501,6 +508,15 @@ def _is_negated_or_contextual(
     # Explicit symptom denial. Do not use a blanket "not" rule because
     # "I am not able to breathe" is itself a positive emergency statement.
     negation_patterns = (
+        # Direct English denial before the matched symptom.
+        r"\bdid not\s*$",
+        r"\bdidn't\s*$",
+        r"\bdo not\s*$",
+        r"\bdon't\s*$",
+        r"\bdoes not\s*$",
+        r"\bdoesn't\s*$",
+
+        # Explicit denial constructions.
         r"\bdid not have\s*$",
         r"\bdidn't have\s*$",
         r"\bdo not have\s*$",
@@ -521,7 +537,6 @@ def _is_negated_or_contextual(
         r"\bnahi\s*$",
         r"\bnahin\s*$",
     )
-
     if any(re.search(pattern, before) for pattern in negation_patterns):
         return True
 

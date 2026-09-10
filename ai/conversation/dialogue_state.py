@@ -26,7 +26,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
-from ai.conversation.ontology import OntologyRegistry
+from ai.conversation.ontology import (
+    GENERAL_HISTORY_FIELD_IDS,
+    OntologyRegistry,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -57,8 +60,10 @@ class InvalidAnswerError(DialogueStateError):
 
 COMPLAINT_FIELDS: dict[str, tuple[str, ...]] = {
     ontology.complaint.value: tuple(
-        clinical_field.identifier
-        for clinical_field in ontology.fields
+        [
+            *(clinical_field.identifier for clinical_field in ontology.fields),
+            *GENERAL_HISTORY_FIELD_IDS,
+        ]
     )
     for ontology in OntologyRegistry.all()
 }

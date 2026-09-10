@@ -55,7 +55,7 @@ def test_next_question_changes_after_answer():
     )
 
     assert result.next_question is not None
-    assert result.next_question.field_id == "duration"
+    assert result.next_question.field_id == "severity"
 
 
 def test_hindi_question_selection():
