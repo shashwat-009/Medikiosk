@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     sarvam_api_key: str
     supabase_url: str
     supabase_service_key: str
+    jwt_secret_key: str
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

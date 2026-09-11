@@ -22,6 +22,7 @@ from app.api.doctors import router as doctors_router
 from app.api.consent import router as consent_router
 from app.api.asr import router as asr_router
 from app.api.conversations import router as conversation_router
+from app.api.auth import router as auth_router
 
 
 Base.metadata.create_all(bind=engine)
@@ -62,7 +63,7 @@ app.include_router(consent_router)
 app.include_router(asr_router)
 app.include_router(conversation_router)
 app.include_router(tts_router)
-
+app.include_router(auth_router)
 
 @app.get("/")
 def root():
