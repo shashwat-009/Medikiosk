@@ -1,6 +1,6 @@
 import json
 import os
-import shutil
+import tempfile
 from uuid import uuid4
 
 from fastapi import (
@@ -11,8 +11,8 @@ from fastapi import (
     HTTPException,
     UploadFile,
 )
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
-from fastapi.responses import FileResponse
 
 from ai.ocr.file_validator import validate_file
 from app.db.database import get_db
@@ -22,6 +22,12 @@ from app.models.patient import Patient
 from app.models.session import Session as SessionModel
 from app.schemas.document import DocumentResponse
 from app.services.ocr_service import process_document_ocr
+from app.services.storage_service import (
+    BUCKET_NAME,
+    delete_document as delete_storage_document,
+    download_document,
+    upload_document as upload_storage_document,
+)
 from app.services.timeline_service import build_medical_timeline
 
 
@@ -35,12 +41,9 @@ router = APIRouter(
 # STORAGE
 # ============================================================
 
-UPLOAD_DIR = "uploads"
-
-os.makedirs(
-    UPLOAD_DIR,
-    exist_ok=True
-)
+# Supabase Storage bucket is used for permanent document storage.
+# Local files are only created temporarily when OCR needs them.
+STORAGE_BUCKET = BUCKET_NAME
 
 
 # ============================================================
@@ -170,63 +173,107 @@ def upload_document(
         )
 
     # --------------------------------------------------------
-    # Generate server-side filename
+    # Read uploaded file
+    # --------------------------------------------------------
+
+    try:
+        file_bytes = file.file.read()
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Failed to read uploaded "
+                f"document: {exc}"
+            )
+        )
+
+    # --------------------------------------------------------
+    # Validate uploaded file using the existing validator
+    #
+    # The validator expects a filesystem path, so create a
+    # temporary local file only for validation.
     # --------------------------------------------------------
 
     extension = os.path.splitext(
         file.filename
     )[1].lower()
 
+    temporary_validation_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=extension,
+        ) as temporary_file:
+
+            temporary_validation_path = (
+                temporary_file.name
+            )
+
+            temporary_file.write(
+                file_bytes
+            )
+
+        is_valid, error = validate_file(
+            temporary_validation_path
+        )
+
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=error
+            )
+
+    finally:
+        if (
+            temporary_validation_path
+            and os.path.exists(
+                temporary_validation_path
+            )
+        ):
+            try:
+                os.remove(
+                    temporary_validation_path
+                )
+            except OSError:
+                pass
+
+    # --------------------------------------------------------
+    # Generate server-side storage path
+    # --------------------------------------------------------
+
     stored_filename = (
         f"{uuid4()}{extension}"
     )
 
-    file_path = os.path.join(
-        UPLOAD_DIR,
-        stored_filename
+    storage_path = (
+        f"patients/{patient_id}/"
+        f"sessions/{session_id}/"
+        f"{stored_filename}"
     )
 
     # --------------------------------------------------------
-    # Save file
+    # Upload to Supabase Storage
     # --------------------------------------------------------
 
     try:
-        with open(
-            file_path,
-            "wb"
-        ) as buffer:
-            shutil.copyfileobj(
-                file.file,
-                buffer
-            )
+        upload_storage_document(
+            file_bytes=file_bytes,
+            storage_path=storage_path,
+            content_type=(
+                file.content_type
+                or "application/octet-stream"
+            ),
+        )
 
     except Exception as exc:
         raise HTTPException(
             status_code=500,
             detail=(
-                "Failed to store "
-                f"document: {exc}"
+                "Failed to store document "
+                f"in Supabase Storage: {exc}"
             )
-        )
-
-    # --------------------------------------------------------
-    # Validate stored file
-    # --------------------------------------------------------
-
-    is_valid, error = validate_file(
-        file_path
-    )
-
-    if not is_valid:
-
-        try:
-            os.remove(file_path)
-        except OSError:
-            pass
-
-        raise HTTPException(
-            status_code=400,
-            detail=error
         )
 
     # --------------------------------------------------------
@@ -238,19 +285,39 @@ def upload_document(
         session_id=session_id,
         filename=file.filename,
         document_type=document_type,
-        file_path=file_path,
+        file_path=storage_path,
         processing_status="uploaded",
     )
 
-    db.add(
-        new_document
-    )
+    try:
+        db.add(
+            new_document
+        )
 
-    db.commit()
+        db.commit()
 
-    db.refresh(
-        new_document
-    )
+        db.refresh(
+            new_document
+        )
+
+    except Exception as exc:
+
+        # Database creation failed after Storage upload.
+        # Remove the orphaned Storage object.
+        try:
+            delete_storage_document(
+                storage_path
+            )
+        except Exception:
+            pass
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Failed to create document "
+                f"record: {exc}"
+            )
+        )
 
     return new_document
 
@@ -448,11 +515,10 @@ def view_document_file(
     db: Session = Depends(get_db)
 ):
     """
-    Serve the original uploaded medical document.
+    Download the original document from Supabase Storage.
 
-    The stored file itself is never modified by OCR or summary editing.
-    Physicians can open the original source record from the clinical
-    review page.
+    The original document is never modified by OCR or summary
+    editing.
     """
 
     document = db.query(
@@ -467,12 +533,28 @@ def view_document_file(
             detail="Document not found"
         )
 
-    if not document.file_path or not os.path.exists(
-        document.file_path
-    ):
+    if not document.file_path:
         raise HTTPException(
             status_code=404,
-            detail="Document file not found"
+            detail="Document storage path not found"
+        )
+
+    # --------------------------------------------------------
+    # Download original from Supabase Storage
+    # --------------------------------------------------------
+
+    try:
+        file_bytes = download_document(
+            document.file_path
+        )
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Document file not found "
+                f"in storage: {exc}"
+            )
         )
 
     extension = os.path.splitext(
@@ -493,11 +575,15 @@ def view_document_file(
         "application/octet-stream"
     )
 
-    return FileResponse(
-        path=document.file_path,
-        filename=document.filename,
+    return Response(
+        content=file_bytes,
         media_type=media_type,
-        content_disposition_type="inline",
+        headers={
+            "Content-Disposition": (
+                "inline; "
+                f'filename="{document.filename}"'
+            )
+        },
     )
 
 
@@ -554,15 +640,24 @@ def delete_document(
         )
 
     # --------------------------------------------------------
-    # Delete physical file
+    # Delete from Supabase Storage
     # --------------------------------------------------------
 
-    if os.path.exists(
-        document.file_path
-    ):
-        os.remove(
-            document.file_path
-        )
+    if document.file_path:
+
+        try:
+            delete_storage_document(
+                document.file_path
+            )
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Failed to delete document "
+                    f"from storage: {exc}"
+                )
+            )
 
     # --------------------------------------------------------
     # Delete database record
