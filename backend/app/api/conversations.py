@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.api.sessions import get_patient_session
+from app.db.database import get_db
 
 from ai.conversation.ayush_mode import AyushMode
 from ai.conversation.dialogue_manager import DialogueManager
@@ -41,6 +45,37 @@ class ConversationAnswerRequest(BaseModel):
     answer: Any
     question_id: str | None = None
     input_type: str = "touch"
+
+
+# ---------------------------------------------------------------------------
+# Patient session authentication
+# ---------------------------------------------------------------------------
+
+
+def require_conversation_session(
+    session_id: int,
+    patient_token: str | None,
+    db: Session,
+):
+    """
+    Authenticate the patient before allowing access to the
+    conversation belonging to a session.
+
+    The token must belong to the requested session and the
+    session must still be active.
+    """
+
+    if not patient_token:
+        raise HTTPException(
+            status_code=401,
+            detail="Patient session credential required",
+        )
+
+    return get_patient_session(
+        session_id=session_id,
+        patient_token=patient_token,
+        db=db,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,9 +150,12 @@ _COMPLAINT_KEYWORDS = {
 }
 
 
-def resolve_complaint(text: str) -> str | None:
+def resolve_complaint(
+    text: str,
+) -> str | None:
     """
-    Resolve a patient's chief complaint to a supported complaint category.
+    Resolve a patient's chief complaint to a supported
+    complaint category.
 
     This is deterministic and does not diagnose the patient.
     """
@@ -139,7 +177,10 @@ def resolve_complaint(text: str) -> str | None:
         return normalized
 
     for complaint, keywords in _COMPLAINT_KEYWORDS.items():
-        if any(keyword in normalized for keyword in keywords):
+        if any(
+            keyword in normalized
+            for keyword in keywords
+        ):
             return complaint
 
     return None
@@ -195,7 +236,8 @@ def serialize_result(
     language: str = "en",
 ):
     """
-    Serialize a conversation result while preserving the active language.
+    Serialize a conversation result while preserving
+    the active language.
     """
 
     return {
@@ -208,7 +250,9 @@ def serialize_result(
             {
                 "detected": result.red_flag.detected,
                 "category": result.red_flag.category,
-                "matched_pattern": result.red_flag.matched_pattern,
+                "matched_pattern": (
+                    result.red_flag.matched_pattern
+                ),
                 "flag_id": result.red_flag.flag_id,
                 "priority": (
                     result.red_flag.priority.value
@@ -235,12 +279,41 @@ def serialize_result(
 @router.post("/start")
 def start_conversation(
     request: ConversationStartRequest,
+    x_patient_session_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
+    db: Session = Depends(get_db),
 ):
+    """
+    Start a clinical history-taking conversation.
+
+    Patient authentication is required.
+
+    The supplied session_id must belong to the authenticated
+    patient session.
+    """
+
+    # ---------------------------------------------------------------
+    # Authenticate patient session
+    # ---------------------------------------------------------------
+
+    require_conversation_session(
+        session_id=request.session_id,
+        patient_token=x_patient_session_token,
+        db=db,
+    )
+
     # ---------------------------------------------------------------
     # Validate mode
     # ---------------------------------------------------------------
 
-    if request.mode not in {"allopathy", "ayush"}:
+    normalized_mode = request.mode.strip().lower()
+
+    if normalized_mode not in {
+        "allopathy",
+        "ayush",
+    }:
         raise HTTPException(
             status_code=400,
             detail=(
@@ -253,7 +326,9 @@ def start_conversation(
     # Resolve chief complaint
     # ---------------------------------------------------------------
 
-    complaint = resolve_complaint(request.complaint)
+    complaint = resolve_complaint(
+        request.complaint
+    )
 
     if complaint is None:
         raise HTTPException(
@@ -270,16 +345,18 @@ def start_conversation(
     # ---------------------------------------------------------------
 
     try:
-        language = QuestionLanguage(request.language)
+        language = QuestionLanguage(
+            request.language
+        )
 
-    except ValueError:
+    except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Unsupported conversation language: "
+                "Unsupported conversation language: "
                 f"{request.language}"
             ),
-        )
+        ) from exc
 
     # ---------------------------------------------------------------
     # Create AYUSH mode when requested
@@ -287,7 +364,7 @@ def start_conversation(
 
     ayush_mode = (
         AyushMode()
-        if request.mode == "ayush"
+        if normalized_mode == "ayush"
         else None
     )
 
@@ -301,7 +378,7 @@ def start_conversation(
         ayush_mode=ayush_mode,
     )
 
-    # Store active manager against the existing session
+    # Replace any existing manager for this session.
     _managers[request.session_id] = manager
 
     # ---------------------------------------------------------------
@@ -313,7 +390,7 @@ def start_conversation(
     return {
         "session_id": request.session_id,
         "complaint": complaint,
-        "mode": request.mode,
+        "mode": normalized_mode,
         "question": serialize_question(
             question,
             language.value,
@@ -330,8 +407,36 @@ def start_conversation(
 @router.post("/answer")
 def answer_conversation(
     request: ConversationAnswerRequest,
+    x_patient_session_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
+    db: Session = Depends(get_db),
 ):
-    manager = _managers.get(request.session_id)
+    """
+    Process a patient's answer.
+
+    The patient must authenticate against the same session
+    whose conversation is being modified.
+    """
+
+    # ---------------------------------------------------------------
+    # Authenticate patient session
+    # ---------------------------------------------------------------
+
+    require_conversation_session(
+        session_id=request.session_id,
+        patient_token=x_patient_session_token,
+        db=db,
+    )
+
+    # ---------------------------------------------------------------
+    # Find conversation
+    # ---------------------------------------------------------------
+
+    manager = _managers.get(
+        request.session_id
+    )
 
     if manager is None:
         raise HTTPException(
@@ -342,32 +447,82 @@ def answer_conversation(
             ),
         )
 
-    if not request.answer:
+    # ---------------------------------------------------------------
+    # Validate answer
+    # ---------------------------------------------------------------
+
+    if request.answer is None:
         raise HTTPException(
             status_code=400,
             detail="Answer cannot be empty.",
         )
 
+    if (
+        isinstance(request.answer, str)
+        and not request.answer.strip()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Answer cannot be empty.",
+        )
+
+    # ---------------------------------------------------------------
+    # Validate input type
+    # ---------------------------------------------------------------
+
+    input_type = (
+        request.input_type
+        .strip()
+        .lower()
+    )
+
+    if input_type not in {
+        "voice",
+        "touch",
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid input_type. "
+                "Use 'voice' or 'touch'."
+            ),
+        )
+
+    # ---------------------------------------------------------------
+    # Process answer
+    # ---------------------------------------------------------------
+
     try:
-        if request.input_type == "voice":
+
+        if input_type == "voice":
+
             result = manager.process_voice_answer(
                 field_id=request.field_id,
-                transcript=str(request.answer),
+                transcript=str(
+                    request.answer
+                ),
                 question_id=request.question_id,
             )
 
         else:
+
             result = manager.process_text_answer(
                 field_id=request.field_id,
-                text=str(request.answer),
+                text=str(
+                    request.answer
+                ),
                 question_id=request.question_id,
             )
 
-    except (ValueError, TypeError) as exc:
+    except (
+        ValueError,
+        TypeError,
+    ) as exc:
+
         raise HTTPException(
             status_code=400,
             detail=str(exc),
-        )
+        ) from exc
 
     return serialize_result(
         result,
@@ -376,18 +531,48 @@ def answer_conversation(
 
 
 # ---------------------------------------------------------------------------
-# Get current question
+# Get current / next question
 # ---------------------------------------------------------------------------
 
 
 @router.get("/{session_id}/next")
-def get_next_question(session_id: int):
-    manager = _managers.get(session_id)
+def get_next_question(
+    session_id: int,
+    x_patient_session_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    Return the next question for the authenticated patient
+    session.
+    """
+
+    # ---------------------------------------------------------------
+    # Authenticate patient session
+    # ---------------------------------------------------------------
+
+    require_conversation_session(
+        session_id=session_id,
+        patient_token=x_patient_session_token,
+        db=db,
+    )
+
+    # ---------------------------------------------------------------
+    # Find conversation
+    # ---------------------------------------------------------------
+
+    manager = _managers.get(
+        session_id
+    )
 
     if manager is None:
         raise HTTPException(
             status_code=404,
-            detail="No active conversation found for this session.",
+            detail=(
+                "No active conversation found for this session."
+            ),
         )
 
     question = manager.get_next_question()
