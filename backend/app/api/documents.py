@@ -1,23 +1,29 @@
+import hashlib
 import json
 import os
+import secrets
 import tempfile
-from uuid import uuid4
 
 from fastapi import (
     APIRouter,
     Depends,
     File,
     Form,
+    Header,
     HTTPException,
     UploadFile,
 )
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from ai.ocr.file_validator import validate_file
+from app.api.auth import decode_token, require_admin
+from app.api.sessions import get_patient_session
 from app.db.database import get_db
 from app.models.consent import Consent
 from app.models.document import Document
+from app.models.doctor import Doctor
 from app.models.patient import Patient
 from app.models.session import Session as SessionModel
 from app.schemas.document import DocumentResponse
@@ -33,16 +39,189 @@ from app.services.timeline_service import build_medical_timeline
 
 router = APIRouter(
     prefix="/documents",
-    tags=["Documents"]
+    tags=["Documents"],
 )
+
+
+# ============================================================
+# AUTHENTICATION
+# ============================================================
+
+optional_bearer_scheme = HTTPBearer(
+    auto_error=False
+)
+
+
+def get_authenticated_doctor(
+    credentials: HTTPAuthorizationCredentials | None,
+    db: Session,
+) -> Doctor | None:
+    """
+    Authenticate an optional physician JWT.
+
+    Returns:
+        Doctor object when a valid physician JWT is supplied.
+        None when no bearer credential is supplied.
+
+    Raises:
+        HTTPException when a bearer credential is supplied
+        but is invalid or does not belong to an active physician.
+    """
+
+    if credentials is None:
+        return None
+
+    subject, role = decode_token(
+        credentials.credentials
+    )
+
+    if role != "physician":
+        raise HTTPException(
+            status_code=403,
+            detail="Physician access required",
+        )
+
+    try:
+        doctor_id = int(subject)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid physician credentials",
+        )
+
+    doctor = (
+        db.query(Doctor)
+        .filter(
+            Doctor.id == doctor_id
+        )
+        .first()
+    )
+
+    if doctor is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Doctor not found",
+        )
+
+    if not doctor.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Doctor account is inactive",
+        )
+
+    return doctor
+
+
+def require_document_access(
+    session_id: int,
+    patient_token: str | None,
+    credentials: HTTPAuthorizationCredentials | None,
+    db: Session,
+) -> SessionModel:
+    """
+    Authorize access to a document belonging to a session.
+
+    Patient:
+        Must provide the patient-session token for the same session.
+
+    Physician:
+        Must provide a valid physician JWT and be assigned
+        to the requested session.
+
+    Returns:
+        The authorized session.
+    """
+
+    # --------------------------------------------------------
+    # Patient authentication
+    # --------------------------------------------------------
+
+    if patient_token:
+        return get_patient_session(
+            session_id=session_id,
+            patient_token=patient_token,
+            db=db,
+        )
+
+    # --------------------------------------------------------
+    # Physician authentication
+    # --------------------------------------------------------
+
+    doctor = get_authenticated_doctor(
+        credentials=credentials,
+        db=db,
+    )
+
+    if doctor is not None:
+        session = (
+            db.query(SessionModel)
+            .filter(
+                SessionModel.id == session_id
+            )
+            .first()
+        )
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found",
+            )
+
+        if session.doctor_id != doctor.id:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "You are not authorized to access "
+                    "documents for this session"
+                ),
+            )
+
+        return session
+
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication required",
+    )
+
+
+def validate_capture_consent(
+    session_id: int,
+    db: Session,
+) -> Consent:
+    """
+    Verify that capture consent exists and has not been revoked.
+    """
+
+    consent = (
+        db.query(Consent)
+        .filter(
+            Consent.session_id == session_id
+        )
+        .first()
+    )
+
+    if consent is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Consent not found for this session",
+        )
+
+    if (
+        not consent.capture_consent
+        or consent.revoked
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Valid capture consent is required",
+        )
+
+    return consent
 
 
 # ============================================================
 # STORAGE
 # ============================================================
 
-# Supabase Storage bucket is used for permanent document storage.
-# Local files are only created temporarily when OCR needs them.
 STORAGE_BUCKET = BUCKET_NAME
 
 
@@ -59,20 +238,82 @@ ALLOWED_DOCUMENT_TYPES = {
 
 
 # ============================================================
-# UPLOAD DOCUMENT
+# UPLOAD DOCUMENT - PATIENT
 # ============================================================
 
 @router.post(
     "/",
-    response_model=DocumentResponse
+    response_model=DocumentResponse,
 )
 def upload_document(
     patient_id: int = Form(...),
     session_id: int = Form(...),
     document_type: str = Form(...),
     file: UploadFile = File(...),
+    x_patient_session_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
     db: Session = Depends(get_db),
 ):
+    """
+    Upload a patient medical document.
+
+    Patient authentication is required.
+
+    The supplied patient_id must match the patient attached
+    to the authenticated consultation session.
+    """
+
+    # --------------------------------------------------------
+    # Authenticate patient session
+    # --------------------------------------------------------
+
+    session = get_patient_session(
+        session_id=session_id,
+        patient_token=x_patient_session_token or "",
+        db=db,
+    )
+
+    # --------------------------------------------------------
+    # Validate patient/session relationship
+    # --------------------------------------------------------
+
+    if session.patient_id != patient_id:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Patient is not authorized "
+                "for this session"
+            ),
+        )
+
+    patient = (
+        db.query(Patient)
+        .filter(
+            Patient.id == patient_id
+        )
+        .first()
+    )
+
+    if patient is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found",
+        )
+
+    # --------------------------------------------------------
+    # Validate consent
+    # --------------------------------------------------------
+
+    validate_capture_consent(
+        session_id=session_id,
+        db=db,
+    )
+
+    # --------------------------------------------------------
+    # Validate document type
+    # --------------------------------------------------------
 
     document_type = (
         document_type
@@ -87,79 +328,7 @@ def upload_document(
                 "Unsupported document type. "
                 "Use prescription, lab_report, "
                 "discharge_summary, or other."
-            )
-        )
-
-    # --------------------------------------------------------
-    # Validate patient
-    # --------------------------------------------------------
-
-    patient = db.query(
-        Patient
-    ).filter(
-        Patient.id == patient_id
-    ).first()
-
-    if patient is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Patient not found"
-        )
-
-    # --------------------------------------------------------
-    # Validate session
-    # --------------------------------------------------------
-
-    session = db.query(
-        SessionModel
-    ).filter(
-        SessionModel.id == session_id
-    ).first()
-
-    if session is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Session not found"
-        )
-
-    if session.patient_id != patient_id:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Session does not belong "
-                "to this patient"
-            )
-        )
-
-    # --------------------------------------------------------
-    # Validate consent
-    # --------------------------------------------------------
-
-    consent = db.query(
-        Consent
-    ).filter(
-        Consent.session_id == session_id
-    ).first()
-
-    if consent is None:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Consent not found "
-                "for this session"
-            )
-        )
-
-    if (
-        not consent.capture_consent
-        or consent.revoked
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Valid capture consent "
-                "is required"
-            )
+            ),
         )
 
     # --------------------------------------------------------
@@ -169,7 +338,7 @@ def upload_document(
     if not file.filename:
         raise HTTPException(
             status_code=400,
-            detail="Filename is required"
+            detail="Filename is required",
         )
 
     # --------------------------------------------------------
@@ -185,14 +354,17 @@ def upload_document(
             detail=(
                 "Failed to read uploaded "
                 f"document: {exc}"
-            )
+            ),
+        )
+
+    if not file_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded document is empty",
         )
 
     # --------------------------------------------------------
-    # Validate uploaded file using the existing validator
-    #
-    # The validator expects a filesystem path, so create a
-    # temporary local file only for validation.
+    # Validate uploaded file
     # --------------------------------------------------------
 
     extension = os.path.splitext(
@@ -222,7 +394,7 @@ def upload_document(
         if not is_valid:
             raise HTTPException(
                 status_code=400,
-                detail=error
+                detail=error,
             )
 
     finally:
@@ -244,7 +416,8 @@ def upload_document(
     # --------------------------------------------------------
 
     stored_filename = (
-        f"{uuid4()}{extension}"
+        f"{secrets.token_hex(16)}"
+        f"{extension}"
     )
 
     storage_path = (
@@ -273,11 +446,11 @@ def upload_document(
             detail=(
                 "Failed to store document "
                 f"in Supabase Storage: {exc}"
-            )
+            ),
         )
 
     # --------------------------------------------------------
-    # Create document
+    # Create document database record
     # --------------------------------------------------------
 
     new_document = Document(
@@ -302,8 +475,7 @@ def upload_document(
 
     except Exception as exc:
 
-        # Database creation failed after Storage upload.
-        # Remove the orphaned Storage object.
+        # Prevent orphaned storage objects.
         try:
             delete_storage_document(
                 storage_path
@@ -316,7 +488,7 @@ def upload_document(
             detail=(
                 "Failed to create document "
                 f"record: {exc}"
-            )
+            ),
         )
 
     return new_document
@@ -328,47 +500,70 @@ def upload_document(
 
 @router.post(
     "/{document_id}/process",
-    response_model=DocumentResponse
+    response_model=DocumentResponse,
 )
 def process_document(
     document_id: int,
-    db: Session = Depends(get_db)
+    x_patient_session_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer_scheme
+    ),
+    db: Session = Depends(get_db),
 ):
+    """
+    Process a document using the existing OCR pipeline.
 
-    document = db.query(
-        Document
-    ).filter(
-        Document.id == document_id
-    ).first()
+    Access:
+        Patient -> own session token
+        Physician -> assigned session JWT
+    """
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id
+        )
+        .first()
+    )
 
     if document is None:
         raise HTTPException(
             status_code=404,
-            detail="Document not found"
+            detail="Document not found",
         )
+
+    require_document_access(
+        session_id=document.session_id,
+        patient_token=x_patient_session_token,
+        credentials=credentials,
+        db=db,
+    )
 
     if document.processing_status == "processing":
         raise HTTPException(
             status_code=409,
-            detail="Document is already being processed"
+            detail="Document is already being processed",
         )
 
     try:
         return process_document_ocr(
             document=document,
-            db=db
+            db=db,
         )
 
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=404,
-            detail=str(exc)
+            detail=str(exc),
         )
 
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail=str(exc)
+            detail=str(exc),
         )
 
     except Exception as exc:
@@ -377,7 +572,7 @@ def process_document(
             detail=(
                 "Document processing failed: "
                 f"{exc}"
-            )
+            ),
         )
 
 
@@ -386,24 +581,47 @@ def process_document(
 # ============================================================
 
 @router.get(
-    "/{document_id}/extracted"
+    "/{document_id}/extracted",
 )
 def get_extracted_data(
     document_id: int,
-    db: Session = Depends(get_db)
+    x_patient_session_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer_scheme
+    ),
+    db: Session = Depends(get_db),
 ):
+    """
+    Return extracted clinical data.
 
-    document = db.query(
-        Document
-    ).filter(
-        Document.id == document_id
-    ).first()
+    Access:
+        Patient -> own session token
+        Physician -> assigned session JWT
+    """
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id
+        )
+        .first()
+    )
 
     if document is None:
         raise HTTPException(
             status_code=404,
-            detail="Document not found"
+            detail="Document not found",
         )
+
+    require_document_access(
+        session_id=document.session_id,
+        patient_token=x_patient_session_token,
+        credentials=credentials,
+        db=db,
+    )
 
     if document.processing_status != "completed":
         raise HTTPException(
@@ -411,13 +629,15 @@ def get_extracted_data(
             detail=(
                 "Document has not completed "
                 "OCR processing"
-            )
+            ),
         )
 
     if not document.extracted_data:
         raise HTTPException(
             status_code=404,
-            detail="No extracted clinical data available"
+            detail=(
+                "No extracted clinical data available"
+            ),
         )
 
     try:
@@ -428,7 +648,10 @@ def get_extracted_data(
     except json.JSONDecodeError:
         raise HTTPException(
             status_code=500,
-            detail="Stored extracted data is invalid JSON"
+            detail=(
+                "Stored extracted data "
+                "is invalid JSON"
+            ),
         )
 
     return {
@@ -448,59 +671,64 @@ def get_extracted_data(
 # ============================================================
 
 @router.get(
-    "/session/{session_id}/timeline"
+    "/session/{session_id}/timeline",
 )
 def get_medical_timeline(
     session_id: int,
-    db: Session = Depends(get_db)
+    x_patient_session_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer_scheme
+    ),
+    db: Session = Depends(get_db),
 ):
     """
-    Return the chronological medical timeline
-    for all successfully processed documents
-    belonging to a session.
+    Return the medical timeline for a session.
+
+    Access:
+        Patient -> own session token
+        Physician -> assigned session JWT
     """
 
-    # --------------------------------------------------------
-    # Validate session
-    # --------------------------------------------------------
-
-    session = db.query(
-        SessionModel
-    ).filter(
-        SessionModel.id == session_id
-    ).first()
-
-    if session is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Session not found"
-        )
-
-    # --------------------------------------------------------
-    # Build timeline
-    # --------------------------------------------------------
+    require_document_access(
+        session_id=session_id,
+        patient_token=x_patient_session_token,
+        credentials=credentials,
+        db=db,
+    )
 
     return build_medical_timeline(
         session_id=session_id,
-        db=db
+        db=db,
     )
 
 
 # ============================================================
-# GET ALL DOCUMENTS
+# GET ALL DOCUMENTS - ADMIN
 # ============================================================
 
 @router.get(
     "/",
-    response_model=list[DocumentResponse]
+    response_model=list[DocumentResponse],
 )
 def get_documents(
-    db: Session = Depends(get_db)
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
 ):
+    """
+    Administrative document listing.
 
-    return db.query(
-        Document
-    ).all()
+    Patient and physician users cannot enumerate
+    the entire document database.
+    """
+
+    return (
+        db.query(Document)
+        .order_by(Document.id.desc())
+        .all()
+    )
 
 
 # ============================================================
@@ -508,40 +736,53 @@ def get_documents(
 # ============================================================
 
 @router.get(
-    "/{document_id}/file"
+    "/{document_id}/file",
 )
 def view_document_file(
     document_id: int,
-    db: Session = Depends(get_db)
+    x_patient_session_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer_scheme
+    ),
+    db: Session = Depends(get_db),
 ):
     """
-    Download the original document from Supabase Storage.
+    Return the original document from Supabase Storage.
 
-    The original document is never modified by OCR or summary
-    editing.
+    Access:
+        Patient -> own session token
+        Physician -> assigned session JWT
     """
 
-    document = db.query(
-        Document
-    ).filter(
-        Document.id == document_id
-    ).first()
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id
+        )
+        .first()
+    )
 
     if document is None:
         raise HTTPException(
             status_code=404,
-            detail="Document not found"
+            detail="Document not found",
         )
+
+    require_document_access(
+        session_id=document.session_id,
+        patient_token=x_patient_session_token,
+        credentials=credentials,
+        db=db,
+    )
 
     if not document.file_path:
         raise HTTPException(
             status_code=404,
-            detail="Document storage path not found"
+            detail="Document storage path not found",
         )
-
-    # --------------------------------------------------------
-    # Download original from Supabase Storage
-    # --------------------------------------------------------
 
     try:
         file_bytes = download_document(
@@ -554,7 +795,7 @@ def view_document_file(
             detail=(
                 "Document file not found "
                 f"in storage: {exc}"
-            )
+            ),
         )
 
     extension = os.path.splitext(
@@ -572,7 +813,11 @@ def view_document_file(
 
     media_type = media_types.get(
         extension,
-        "application/octet-stream"
+        "application/octet-stream",
+    )
+
+    safe_filename = os.path.basename(
+        document.filename or "document"
     )
 
     return Response(
@@ -581,7 +826,7 @@ def view_document_file(
         headers={
             "Content-Disposition": (
                 "inline; "
-                f'filename="{document.filename}"'
+                f'filename="{safe_filename}"'
             )
         },
     )
@@ -593,50 +838,79 @@ def view_document_file(
 
 @router.get(
     "/{document_id}",
-    response_model=DocumentResponse
+    response_model=DocumentResponse,
 )
 def get_document(
     document_id: int,
-    db: Session = Depends(get_db)
+    x_patient_session_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer_scheme
+    ),
+    db: Session = Depends(get_db),
 ):
+    """
+    Return one document only when the caller is authorized
+    for the document's session.
+    """
 
-    document = db.query(
-        Document
-    ).filter(
-        Document.id == document_id
-    ).first()
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id
+        )
+        .first()
+    )
 
     if document is None:
         raise HTTPException(
             status_code=404,
-            detail="Document not found"
+            detail="Document not found",
         )
+
+    require_document_access(
+        session_id=document.session_id,
+        patient_token=x_patient_session_token,
+        credentials=credentials,
+        db=db,
+    )
 
     return document
 
 
 # ============================================================
-# DELETE DOCUMENT
+# DELETE DOCUMENT - ADMIN
 # ============================================================
 
 @router.delete(
-    "/{document_id}"
+    "/{document_id}",
 )
 def delete_document(
     document_id: int,
-    db: Session = Depends(get_db)
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
 ):
+    """
+    Delete a document.
 
-    document = db.query(
-        Document
-    ).filter(
-        Document.id == document_id
-    ).first()
+    Restricted to administrators so that a patient or
+    physician cannot permanently destroy clinical records.
+    """
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id
+        )
+        .first()
+    )
 
     if document is None:
         raise HTTPException(
             status_code=404,
-            detail="Document not found"
+            detail="Document not found",
         )
 
     # --------------------------------------------------------
@@ -656,7 +930,7 @@ def delete_document(
                 detail=(
                     "Failed to delete document "
                     f"from storage: {exc}"
-                )
+                ),
             )
 
     # --------------------------------------------------------
@@ -670,7 +944,5 @@ def delete_document(
     db.commit()
 
     return {
-        "message": (
-            "Document deleted successfully"
-        )
+        "message": "Document deleted successfully",
     }
