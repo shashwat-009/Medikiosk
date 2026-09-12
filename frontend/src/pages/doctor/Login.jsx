@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import "./doctor.css";
+import { api, setDoctorAccessToken } from "../../services/api";
 
+import "./doctor.css";
 
 export default function Login() {
   const navigate = useNavigate();
 
   const [doctorId, setDoctorId] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
     const id = doctorId.trim();
@@ -21,16 +23,49 @@ export default function Login() {
       return;
     }
 
+    if (!password) {
+      setError("Please enter your password.");
+      return;
+    }
+
     setError("");
+    setIsLoading(true);
 
-    sessionStorage.setItem(
-      "doctorId",
-      id
-    );
+    try {
+      const response = await api("/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          username: id,
+          password,
+        }),
+      });
 
-    navigate("/doctor");
+      if (!response?.access_token) {
+        throw new Error("Login failed. No access token was returned.");
+      }
+
+      setDoctorAccessToken(response.access_token);
+
+      sessionStorage.setItem(
+        "doctorId",
+        id
+      );
+
+      navigate("/doctor");
+    } catch (err) {
+      console.error("Doctor login failed:", err);
+
+      setError(
+        err?.message ||
+          "Unable to sign in. Please check your doctor ID and password."
+      );
+    } finally {
+      setIsLoading(false);
+    }
   }
-
 
   return (
     <main className="doctor-login-page">
@@ -117,7 +152,29 @@ export default function Login() {
                   setDoctorId(event.target.value)
                 }
                 placeholder="Enter doctor ID"
-                autoComplete="off"
+                autoComplete="username"
+                disabled={isLoading}
+              />
+
+            </div>
+
+
+            <div className="doctor-field">
+
+              <label htmlFor="doctor-password">
+                Password
+              </label>
+
+              <input
+                id="doctor-password"
+                type="password"
+                value={password}
+                onChange={(event) =>
+                  setPassword(event.target.value)
+                }
+                placeholder="Enter password"
+                autoComplete="current-password"
+                disabled={isLoading}
               />
 
             </div>
@@ -133,9 +190,13 @@ export default function Login() {
             <button
               type="submit"
               className="doctor-login-button"
+              disabled={isLoading}
             >
-              Continue
-              <span>→</span>
+              {isLoading ? "Signing in..." : "Continue"}
+
+              {!isLoading && (
+                <span>→</span>
+              )}
             </button>
 
           </form>

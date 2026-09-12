@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { api } from "../../services/api";
+import { api, clearDoctorAccessToken } from "../../services/api";
 
 import "./doctor.css";
 
@@ -43,7 +43,10 @@ export default function SessionReview() {
 
     try {
       const data = await api(
-        `/doctors/${doctorId}/sessions/${sessionId}/review`
+        `/doctors/${doctorId}/sessions/${sessionId}/review`,
+        {
+          auth: "doctor",
+        }
       );
 
       setReview(data);
@@ -1141,6 +1144,7 @@ export default function SessionReview() {
           body: JSON.stringify({
             status: "accepted",
           }),
+          auth: "doctor",
         }
       );
 
@@ -1209,6 +1213,7 @@ export default function SessionReview() {
           body: JSON.stringify({
             status: "rejected",
           }),
+          auth: "doctor",
         }
       );
 
@@ -1314,6 +1319,7 @@ export default function SessionReview() {
           body: JSON.stringify({
             content: serializedContent,
           }),
+          auth: "doctor",
         }
       );
 
@@ -1483,6 +1489,7 @@ export default function SessionReview() {
             type="button"
             className="doctor-topbar__logout"
             onClick={() => {
+              clearDoctorAccessToken();
               sessionStorage.removeItem(
                 "doctorId"
               );

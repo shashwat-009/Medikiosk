@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../../services/api";
+import {
+  api,
+  clearDoctorAccessToken,
+} from "../../services/api";
 import "./doctor.css";
 
 export default function Dashboard() {
@@ -36,8 +39,12 @@ export default function Dashboard() {
       setError("");
 
       const [doctorData, sessionsData] = await Promise.all([
-        api(`/doctors/${doctorId}`),
-        api(`/doctors/${doctorId}/sessions`),
+        api(`/doctors/${doctorId}`, {
+          auth: "doctor",
+        }),
+        api(`/doctors/${doctorId}/sessions`, {
+          auth: "doctor",
+        }),
       ]);
 
       setDoctor(doctorData);
@@ -50,7 +57,10 @@ export default function Dashboard() {
         sessionList.map(async (session) => {
           try {
             const review = await api(
-              `/doctors/${doctorId}/sessions/${session.id}/review`
+              `/doctors/${doctorId}/sessions/${session.id}/review`,
+              {
+                auth: "doctor",
+              }
             );
 
             return {
@@ -89,6 +99,7 @@ export default function Dashboard() {
      ============================================================ */
 
   function handleLogout() {
+    clearDoctorAccessToken();
     sessionStorage.removeItem("doctorId");
     navigate("/doctor/login");
   }
@@ -680,12 +691,12 @@ export default function Dashboard() {
                             <td>
 
                               <span
-                                className={`doctor-case-status doctor-case-status--${
+                                className={`doctor-case-status ${
                                   status === "accepted"
-                                    ? "accepted"
+                                    ? "doctor-case-status--accepted"
                                     : status === "rejected"
-                                    ? "rejected"
-                                    : "pending"
+                                    ? "doctor-case-status--rejected"
+                                    : "doctor-case-status--pending"
                                 }`}
                               >
 

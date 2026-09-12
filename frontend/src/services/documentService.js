@@ -5,10 +5,12 @@ export const documentService = {
     api("/documents/", {
       method: "POST",
       body: data,
+      auth: "patient",
     }),
 
   process: (documentId) =>
     api(`/documents/${documentId}/process`, {
       method: "POST",
+      auth: "patient",
     }),
 };
