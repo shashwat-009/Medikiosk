@@ -1,1 +1,0 @@
-export default function LanguageSelector({ value, onChange, languages = ['en'] }) { return <select value={value} onChange={e => onChange(e.target.value)}>{languages.map(language => <option key={language} value={language}>{language}</option>)}</select>; }
