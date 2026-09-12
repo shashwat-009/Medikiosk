@@ -1,11 +1,10 @@
-"""Deterministic source merger for the physician review screen.
+"""Deterministic source merger with provenance and conflict preservation.
 
-The physician view has two canonical sources:
-1. Patient interview -> clinical history sections.
-2. Uploaded medical documents -> one dedicated document-extraction section.
+This module keeps interview information and OCR-derived clinical information
+separate so the physician UI receives clean, clinically meaningful sections.
 
-OCR data is intentionally NOT copied into interview sections. This prevents the
-same medication/lab/diagnosis from appearing in multiple places.
+OCR metadata such as document type, patient identifiers, filenames and internal
+document IDs is deliberately excluded from the clinical findings section.
 """
 
 from __future__ import annotations
@@ -23,7 +22,8 @@ from .schemas import (
 )
 
 
-# OCR bookkeeping fields are never clinical findings.
+# These are document/OCR bookkeeping fields, not clinical findings.
+# They should never be rendered as part of the physician's clinical summary.
 _NON_CLINICAL_DOCUMENT_FIELDS = {
     "document_id",
     "documentid",
@@ -32,67 +32,50 @@ _NON_CLINICAL_DOCUMENT_FIELDS = {
     "document_type",
     "documenttype",
     "patient",
-    "patient_name",
     "patient_id",
     "patientid",
     "hospital_id",
     "hospitalid",
-    "age",
-    "sex",
-    "gender",
     "id",
     "raw_text",
     "ocr_text",
     "text",
     "confidence",
     "processing_status",
-    "source",
-    "provenance",
 }
 
 
-def _canonical(value: Any) -> Any:
-    """Create a stable, metadata-free representation for deduplication."""
+def _key(value: Any) -> str:
     if isinstance(value, dict):
-        return tuple(
+        return repr(
             sorted(
-                (
-                    str(key).strip().casefold(),
-                    _canonical(child),
-                )
-                for key, child in value.items()
-                if str(key).strip().casefold()
-                not in _NON_CLINICAL_DOCUMENT_FIELDS
+                (str(k), repr(v))
+                for k, v in value.items()
             )
-        )
+        ).lower()
 
     if isinstance(value, list):
-        return tuple(_canonical(item) for item in value)
+        return repr(value).lower()
 
-    if isinstance(value, str):
-        return " ".join(value.split()).casefold()
-
-    return value
+    return str(value).strip().casefold()
 
 
 def _merge_lists(
     *groups: List[NormalizedItem],
 ) -> Tuple[List[Any], List[Provenance]]:
-    """Stable union of values while removing true duplicates."""
+    """Stable union. Equal values are deduplicated; unequal values remain."""
     result: List[Any] = []
     provenance: List[Provenance] = []
     seen = set()
 
     for group in groups:
         for item in group:
-            key = _canonical(item.value)
+            k = _key(item.value)
 
-            if key in seen:
-                continue
-
-            seen.add(key)
-            result.append(item.value)
-            provenance.append(item.provenance)
+            if k not in seen:
+                seen.add(k)
+                result.append(item.value)
+                provenance.append(item.provenance)
 
     return result, provenance
 
@@ -102,10 +85,10 @@ def _merge_field(
     groups: List[List[NormalizedItem]],
     conflicts: Dict[str, ConflictValue],
     provenance: Dict[str, List[Provenance]],
-    *,
     detect_conflict: bool = True,
 ) -> List[Any]:
     values, prov = _merge_lists(*groups)
+
     provenance[field] = prov
 
     if detect_conflict and len(values) > 1:
@@ -120,7 +103,17 @@ def _merge_field(
 def _clinical_document_entities(
     entities: List[NormalizedItem],
 ) -> List[NormalizedItem]:
-    """Keep only clinical OCR entities and remove document metadata."""
+    """Return only clinically useful OCR entities.
+
+    ``clinical_entities`` is intentionally broad at the OCR boundary. It can
+    contain diagnoses and findings, but it can also contain document metadata.
+
+    The merger is the final deterministic boundary before physician-facing
+    rendering, so metadata is filtered here.
+
+    Structured labs and medications are handled separately and are therefore
+    not duplicated here.
+    """
     result: List[NormalizedItem] = []
 
     for item in entities:
@@ -135,18 +128,26 @@ def _clinical_document_entities(
         if path in _NON_CLINICAL_DOCUMENT_FIELDS:
             continue
 
+        # Some extractors use dotted/nested paths, e.g.
+        # ``patient.name`` or ``document.filename``.
         final_component = path.rsplit(".", 1)[-1]
 
         if final_component in _NON_CLINICAL_DOCUMENT_FIELDS:
             continue
 
-        # Some OCR extractors store many entity types under the generic
-        # ``clinical_entities`` path and put the actual field name inside the
-        # value, e.g. {"field": "patient", "value": {...}}.
+        # Some OCR extractors store the actual field inside the value.
         if isinstance(item.value, dict):
-            inner_field = str(
-                item.value.get("field") or item.value.get("type") or ""
-            ).strip().casefold().replace("-", "_").replace(" ", "_")
+            inner_field = (
+                str(
+                    item.value.get("field")
+                    or item.value.get("type")
+                    or ""
+                )
+                .strip()
+                .casefold()
+                .replace("-", "_")
+                .replace(" ", "_")
+            )
 
             if inner_field in _NON_CLINICAL_DOCUMENT_FIELDS:
                 continue
@@ -156,29 +157,22 @@ def _clinical_document_entities(
     return result
 
 
-def _document_groups(ocr) -> List[List[NormalizedItem]]:
-    """Return every clinically useful OCR stream exactly once."""
-    if not ocr:
-        return []
-
-    return [
-        ocr.medications,
-        ocr.labs,
-        ocr.allergies,
-        ocr.discharge_findings,
-        _clinical_document_entities(ocr.clinical_entities),
-    ]
-
-
 def merge_sources(data: SummaryInput) -> SummaryResult:
-    """Build a clean physician-facing case sheet.
+    """Merge interview, OCR and timeline data into the clinical case sheet.
 
     Canonical placement:
-    - Interview symptoms/history -> normal clinical summary.
-    - OCR medications/labs/diagnoses/procedures/findings -> document extraction.
-    - OCR metadata -> nowhere in the physician clinical summary.
-    """
 
+    - Interview symptoms/history -> normal clinical summary.
+    - OCR medications -> medication_history.
+    - OCR laboratory results -> investigations.
+    - OCR allergies -> allergies.
+    - Remaining clinically useful OCR entities/findings ->
+      document_derived_findings.
+    - OCR metadata -> excluded from the clinical summary.
+
+    This keeps structured document information available to the physician
+    without mixing document metadata into patient symptoms.
+    """
     c = data.conversation
     o = data.ocr
 
@@ -186,9 +180,15 @@ def merge_sources(data: SummaryInput) -> SummaryResult:
     conflicts: Dict[str, ConflictValue] = {}
     provenance: Dict[str, List[Provenance]] = {}
 
-    # ------------------------------------------------------------------
-    # INTERVIEW ONLY
-    # ------------------------------------------------------------------
+    ocr_clinical_entities = (
+        _clinical_document_entities(o.clinical_entities)
+        if o
+        else []
+    )
+
+    # ------------------------------------------------------------
+    # Interview-derived clinical sections
+    # ------------------------------------------------------------
 
     sections.chief_complaints = _merge_field(
         "chief_complaints",
@@ -197,7 +197,8 @@ def merge_sources(data: SummaryInput) -> SummaryResult:
         provenance,
     )
 
-    # Multiple HPI question/answer pairs are expected, not conflicts.
+    # HPI can legitimately contain multiple question/answer items.
+    # Multiple HPI items are not a conflict.
     sections.history_of_present_illness = _merge_field(
         "history_of_present_illness",
         [c.history_of_present_illness if c else []],
@@ -206,6 +207,7 @@ def merge_sources(data: SummaryInput) -> SummaryResult:
         detect_conflict=False,
     )
 
+    # OCR clinical entities are deliberately NOT placed into symptoms.
     sections.relevant_symptoms = _merge_field(
         "relevant_symptoms",
         [c.symptoms if c else []],
@@ -220,28 +222,59 @@ def merge_sources(data: SummaryInput) -> SummaryResult:
         provenance,
     )
 
-    # OCR medication/lab data used to be copied here AND rendered again
-    # inside Medical Documents. Keep these sections interview-only.
+    # ------------------------------------------------------------
+    # Structured OCR clinical information
+    # ------------------------------------------------------------
+
+    # OCR medications belong in medication history.
     sections.medication_history = _merge_field(
         "medication_history",
-        [c.medications if c else []],
+        [
+            c.medications if c else [],
+            o.medications if o else [],
+        ],
         conflicts,
         provenance,
     )
 
     sections.allergies = _merge_field(
         "allergies",
-        [c.allergies if c else []],
+        [
+            c.allergies if c else [],
+            o.allergies if o else [],
+        ],
         conflicts,
         provenance,
     )
 
+    # OCR laboratory/test results belong in investigations.
     sections.investigations = _merge_field(
         "investigations",
-        [c.investigations if c else []],
+        [
+            c.investigations if c else [],
+            o.labs if o else [],
+        ],
         conflicts,
         provenance,
     )
+
+    # ------------------------------------------------------------
+    # Document-derived clinical findings
+    # ------------------------------------------------------------
+
+    sections.document_derived_findings = _merge_field(
+        "document_derived_findings",
+        [
+            o.discharge_findings if o else [],
+            ocr_clinical_entities,
+        ],
+        conflicts,
+        provenance,
+    )
+
+    # ------------------------------------------------------------
+    # Red flags
+    # ------------------------------------------------------------
 
     sections.red_flags = _merge_field(
         "red_flags",
@@ -257,37 +290,9 @@ def merge_sources(data: SummaryInput) -> SummaryResult:
         provenance,
     )
 
-    # ------------------------------------------------------------------
-    # ONE CANONICAL OCR LOCATION
-    # ------------------------------------------------------------------
-
-    document_values: List[Any] = []
-    document_provenance: List[Provenance] = []
-    seen_document_values = set()
-
-    for group in _document_groups(o):
-        for item in group:
-            key = _canonical(item.value)
-
-            if key in seen_document_values:
-                continue
-
-            seen_document_values.add(key)
-            document_values.append(item.value)
-            document_provenance.append(item.provenance)
-
-    sections.document_derived_findings = document_values
-    provenance["document_derived_findings"] = document_provenance
-
-    # Multiple labs/medications/diagnoses in a document are normal. They are
-    # not source conflicts and should not force the whole summary into a
-    # conflict state.
-    #
-    # If the same clinical fact is extracted twice, _canonical() removes it.
-
-    # ------------------------------------------------------------------
-    # TIMELINE
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
+    # Timeline
+    # ------------------------------------------------------------
 
     timeline = list(data.timeline)
 
@@ -304,12 +309,16 @@ def merge_sources(data: SummaryInput) -> SummaryResult:
 
     provenance["timeline"] = (
         [event.provenance for event in data.timeline]
-        + ([item.provenance for item in o.timeline] if o else [])
+        + (
+            [item.provenance for item in o.timeline]
+            if o
+            else []
+        )
     )
 
-    # ------------------------------------------------------------------
-    # OTHER EXPLICITLY NORMALIZED FIELDS
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
+    # Remaining explicitly normalized fields
+    # ------------------------------------------------------------
 
     other: Dict[str, List[Any]] = {}
     other_groups = []
@@ -320,10 +329,21 @@ def merge_sources(data: SummaryInput) -> SummaryResult:
     if o:
         other_groups.append(o.other)
 
-    for key in sorted({key for group in other_groups for key in group}):
-        values, prov = _merge_lists(
-            *[group.get(key, []) for group in other_groups]
-        )
+    keys = sorted(
+        {
+            key
+            for group in other_groups
+            for key in group
+        }
+    )
+
+    for key in keys:
+        groups = [
+            group.get(key, [])
+            for group in other_groups
+        ]
+
+        values, prov = _merge_lists(*groups)
 
         if values:
             other[key] = values
