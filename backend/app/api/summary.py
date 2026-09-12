@@ -140,21 +140,17 @@ def get_authenticated_physician(
     db: Session,
 ):
     """
-    Validate a physician JWT.
+    Validate a physician JWT and return the active Doctor.
 
-    Returns:
-        Doctor object
-
-    Returns None when no bearer token is supplied.
+    `decode_token()` in app.api.auth returns `(subject, role)`, not
+    the raw JWT payload. Keep this helper aligned with that contract.
     """
 
     if credentials is None:
         return None
 
     try:
-        payload = decode_token(
-            credentials.credentials
-        )
+        subject, role = decode_token(credentials.credentials)
     except HTTPException:
         raise
     except Exception as exc:
@@ -163,22 +159,14 @@ def get_authenticated_physician(
             detail="Invalid authentication token",
         ) from exc
 
-    if payload.get("role") != "physician":
+    if role != "physician":
         raise HTTPException(
             status_code=403,
             detail="Physician access required",
         )
 
-    doctor_id = payload.get("sub")
-
-    if doctor_id is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid physician token",
-        )
-
     try:
-        doctor_id = int(doctor_id)
+        doctor_id = int(subject)
     except (TypeError, ValueError) as exc:
         raise HTTPException(
             status_code=401,
