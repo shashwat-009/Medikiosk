@@ -150,10 +150,26 @@ export default function Processing() {
           `/summaries/session/${sessionId}/generate`
         );
 
+        /*
+         * IMPORTANT:
+         *
+         * Summary generation is performed while the
+         * patient is still in the active kiosk session.
+         *
+         * Therefore the request must use the patient
+         * session credential.
+         *
+         * The api() helper automatically adds:
+         *
+         * X-Patient-Session-Token
+         *
+         * from sessionStorage.
+         */
         const summaryResult = await api(
           `/summaries/session/${sessionId}/generate`,
           {
             method: "POST",
+            auth: "patient",
           }
         );
 
@@ -173,7 +189,7 @@ export default function Processing() {
          *
          * The selected consultation mode determines
          * the department used by the backend to assign
-         * the appropriate doctor.
+         * the appropriate active doctor.
          *
          * No doctor is hardcoded here.
          */
@@ -220,7 +236,6 @@ export default function Processing() {
         );
 
         navigate("/confirmation");
-
       } catch (err) {
         console.error(
           "================================================"
@@ -255,12 +270,13 @@ export default function Processing() {
     }
 
     processSession();
-
   }, [
     navigate,
     state.documents,
     state.session,
+    state.mode,
     language,
+    setSession,
   ]);
 
   return (

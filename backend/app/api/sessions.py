@@ -610,6 +610,64 @@ def get_sessions(
 
 
 # ============================================================
+# Get Assigned Doctor for Patient Session
+# ============================================================
+
+@router.get(
+    "/{session_id}/doctor",
+)
+def get_session_doctor(
+    session_id: int,
+    patient_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    Return the assigned doctor's display information for the
+    authenticated patient session.
+
+    Patient access is limited to the active session represented
+    by the supplied patient-session credential.
+    """
+
+    session = get_patient_session(
+        session_id,
+        patient_token,
+        db,
+    )
+
+    if session.doctor_id is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No doctor assigned to this session",
+        )
+
+    doctor = (
+        db.query(Doctor)
+        .filter(
+            Doctor.id == session.doctor_id,
+            Doctor.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if doctor is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Assigned doctor not found",
+        )
+
+    return {
+        "id": doctor.id,
+        "name": doctor.name,
+        "specialization": doctor.specialization,
+        "department": doctor.department,
+    }
+
+
+# ============================================================
 # Get One Session
 # ============================================================
 

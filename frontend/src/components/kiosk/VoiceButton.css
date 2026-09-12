@@ -3,33 +3,43 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   margin: 0;
 }
 
 .voice-button__control {
   width: 108px;
   height: 108px;
+
   border: 2px solid var(--teal-700);
   border-radius: 50%;
+
   background: var(--teal-50);
   color: var(--teal-900);
+
   display: inline-flex;
   align-items: center;
   justify-content: center;
+
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(15, 118, 110, 0.14);
+
+  box-shadow:
+    0 6px 18px rgba(15, 118, 110, 0.14);
+
   transition:
     background-color 160ms ease,
     border-color 160ms ease,
     color 160ms ease,
     box-shadow 160ms ease,
     transform 120ms ease;
+
   -webkit-tap-highlight-color: transparent;
 }
 
 .voice-button__control:hover:not(:disabled) {
-  box-shadow: 0 8px 22px rgba(15, 118, 110, 0.2);
+  box-shadow:
+    0 8px 22px rgba(15, 118, 110, 0.2);
+
   transform: translateY(-1px);
 }
 
@@ -42,59 +52,127 @@
   outline-offset: 4px;
 }
 
-.voice-button__icon {
-  font-size: 36px;
-  line-height: 1;
+/* ============================================================
+   IDLE
+   ============================================================ */
+
+.voice-button--idle .voice-button__control {
+  background: var(--teal-50);
+  border-color: var(--teal-700);
+  color: var(--teal-900);
+}
+
+.voice-button--idle .voice-button__label {
+  color: var(--teal-900);
+}
+
+/* ============================================================
+   MICROPHONE
+   ============================================================ */
+
+.voice-button__mic-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+
+  font-size: 36px;
+  line-height: 1;
 }
 
-.voice-button__control--listening {
-  background: #b42318;
-  border-color: #b42318;
+/* ============================================================
+   LISTENING
+   ============================================================ */
+
+.voice-button--listening .voice-button__control {
+  background: var(--teal-700);
+  border-color: var(--teal-700);
   color: #ffffff;
-  animation: voice-listening-pulse 1.2s ease-in-out infinite;
+
+  animation:
+    voice-listening-pulse 1.2s
+    ease-in-out infinite;
 }
 
-.voice-button__control--listening .voice-button__icon {
-  font-size: 30px;
+.voice-button__stop-icon {
+  width: 24px;
+  height: 24px;
+
+  border-radius: 5px;
+
+  background: currentColor;
+
+  display: block;
 }
 
-.voice-button__control--processing {
+.voice-button--listening .voice-button__label {
+  color: var(--teal-700);
+}
+
+/* ============================================================
+   PROCESSING
+   ============================================================ */
+
+.voice-button--processing .voice-button__control {
   cursor: wait;
+
   background: var(--teal-100);
   border-color: var(--teal-500);
   color: var(--teal-800);
+
   box-shadow: none;
 }
 
-.voice-button__control--processing .voice-button__icon {
+.voice-button__processing-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
   font-size: 40px;
-  animation: voice-processing 900ms ease-in-out infinite;
+  line-height: 1;
+
+  animation:
+    voice-processing 900ms
+    ease-in-out infinite;
 }
+
+.voice-button--processing .voice-button__label {
+  color: var(--teal-800);
+}
+
+/* ============================================================
+   LABEL
+   ============================================================ */
 
 .voice-button__label {
   min-height: 20px;
-  color: var(--text-primary, #1f2937);
+
   font-size: 14px;
   font-weight: 700;
   line-height: 20px;
+
   text-align: center;
+
+  transition:
+    color 160ms ease,
+    opacity 160ms ease;
 }
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
 
 @keyframes voice-listening-pulse {
   0%,
   100% {
     box-shadow:
-      0 0 0 0 rgba(180, 35, 24, 0.38),
-      0 8px 20px rgba(180, 35, 24, 0.2);
+      0 0 0 0 rgba(15, 118, 110, 0.32),
+      0 8px 20px rgba(15, 118, 110, 0.16);
   }
 
   50% {
     box-shadow:
-      0 0 0 13px rgba(180, 35, 24, 0),
-      0 8px 24px rgba(180, 35, 24, 0.28);
+      0 0 0 13px rgba(15, 118, 110, 0),
+      0 8px 24px rgba(15, 118, 110, 0.24);
   }
 }
 
@@ -109,21 +187,26 @@
   }
 }
 
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
 @media (max-width: 768px) {
   .voice-button__control {
     width: 92px;
     height: 92px;
   }
 
-  .voice-button__icon {
+  .voice-button__mic-icon {
     font-size: 32px;
   }
 
-  .voice-button__control--listening .voice-button__icon {
-    font-size: 27px;
+  .voice-button__stop-icon {
+    width: 21px;
+    height: 21px;
   }
 
-  .voice-button__control--processing .voice-button__icon {
+  .voice-button__processing-icon {
     font-size: 36px;
   }
 
@@ -131,6 +214,10 @@
     font-size: 13px;
   }
 }
+
+/* ============================================================
+   ACCESSIBILITY
+   ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
   .voice-button__control,
@@ -140,8 +227,9 @@
     transform: none;
   }
 
-  .voice-button__control--listening,
-  .voice-button__control--processing .voice-button__icon {
+  .voice-button--listening .voice-button__control,
+  .voice-button--processing
+    .voice-button__processing-icon {
     animation: none;
   }
 }

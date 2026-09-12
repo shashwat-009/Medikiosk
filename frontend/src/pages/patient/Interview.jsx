@@ -145,9 +145,9 @@ export default function Interview() {
     conversationStarted
       ? getQuestionText(currentQuestion)
       : translate(
-          language,
-          "interview.questions.chiefComplaint"
-        );
+        language,
+        "interview.questions.chiefComplaint"
+      );
 
   /*
    * ============================================================
@@ -718,18 +718,15 @@ export default function Interview() {
 
           <div className="interview__voice-section">
 
-            <p className="interview__input-hint">
-              {translate(
-                language,
-                "interview.speak"
-              )}
-            </p>
-
             <VoiceButton
               state={
                 isStarting
                   ? "processing"
                   : inputMode
+              }
+
+              sessionId={
+                state.session?.id
               }
 
               onStart={
@@ -751,16 +748,6 @@ export default function Interview() {
                 );
               }}
             />
-
-            {inputMode ===
-              "listening" && (
-              <p className="interview__listening">
-                {translate(
-                  language,
-                  "interview.listening"
-                )}
-              </p>
-            )}
 
           </div>
 
@@ -869,15 +856,15 @@ export default function Interview() {
             >
 
               {isSubmitting ||
-              isStarting
+                isStarting
                 ? translate(
-                    language,
-                    "common.loading"
-                  )
+                  language,
+                  "common.loading"
+                )
                 : translate(
-                    language,
-                    "interview.continue"
-                  )}
+                  language,
+                  "interview.continue"
+                )}
 
               {!isSubmitting &&
                 !isStarting && (

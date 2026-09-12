@@ -14,7 +14,7 @@ export default function Confirmation() {
 
   const language = state.language || "en";
   const session = state.session;
-  const doctorId = session?.doctor_id ?? session?.doctorId ?? null;
+  const sessionId = session?.id ?? session?.session_id ?? null;
 
   const [doctor, setDoctor] = useState(null);
 
@@ -22,13 +22,19 @@ export default function Confirmation() {
     let cancelled = false;
 
     async function loadAssignedDoctor() {
-      if (!doctorId) {
+      if (!sessionId) {
         setDoctor(null);
         return;
       }
 
       try {
-        const doctorData = await api(`/doctors/${doctorId}`);
+        const doctorData = await api(
+          `/sessions/${encodeURIComponent(sessionId)}/doctor`,
+          {
+            method: "GET",
+            auth: "patient",
+          }
+        );
 
         if (!cancelled) {
           setDoctor(doctorData);
@@ -47,7 +53,7 @@ export default function Confirmation() {
     return () => {
       cancelled = true;
     };
-  }, [doctorId]);
+  }, [sessionId]);
 
   function handleContinue() {
     navigate("/");

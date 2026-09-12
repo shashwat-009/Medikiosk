@@ -44,6 +44,201 @@ ALLOWED_AUDIO_EXTENSIONS = {
 
 
 # ============================================================
+# SHARED AUDIO VALIDATION + SARVAM TRANSCRIPTION
+# ============================================================
+
+async def _transcribe_with_sarvam(
+    file: UploadFile,
+):
+    """
+    Validate an uploaded audio file, temporarily store it,
+    and transcribe it using the existing Sarvam provider.
+
+    No clinical/session data is stored here.
+    """
+
+    # --------------------------------------------------------
+    # Validate uploaded file
+    # --------------------------------------------------------
+
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Audio file is required",
+        )
+
+    suffix = Path(file.filename).suffix.lower()
+
+    if not suffix:
+        raise HTTPException(
+            status_code=400,
+            detail="Audio file must have an extension",
+        )
+
+    if suffix not in ALLOWED_AUDIO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unsupported audio format. "
+                "Please upload WAV, MP3, MP4, M4A, "
+                "WebM, OGG, or FLAC audio."
+            ),
+        )
+
+    temporary_path: Path | None = None
+
+    try:
+        # ----------------------------------------------------
+        # Read and store temporary audio
+        # ----------------------------------------------------
+
+        content = await file.read()
+
+        if not content:
+            raise HTTPException(
+                status_code=400,
+                detail="Audio file is empty",
+            )
+
+        if len(content) > MAX_AUDIO_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail="Audio file is too large",
+            )
+
+        with NamedTemporaryFile(
+            delete=False,
+            suffix=suffix,
+        ) as temporary_file:
+
+            temporary_path = Path(
+                temporary_file.name
+            )
+
+            temporary_file.write(content)
+
+        # ----------------------------------------------------
+        # Validate actual audio file
+        # ----------------------------------------------------
+
+        validate_audio_file(
+            temporary_path
+        )
+
+        # ----------------------------------------------------
+        # Sarvam configuration
+        # ----------------------------------------------------
+
+        if not settings.sarvam_api_key:
+            logger.error(
+                "SARVAM_API_KEY is not configured"
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail="Speech recognition service is not configured",
+            )
+
+        # Sarvam provider reads the API key from the environment.
+        os.environ["SARVAM_API_KEY"] = (
+            settings.sarvam_api_key
+        )
+
+        # ----------------------------------------------------
+        # Sarvam transcription
+        # ----------------------------------------------------
+
+        provider = SarvamASRProvider()
+
+        result = provider.transcribe(
+            temporary_path
+        )
+
+        return result.model_dump()
+
+    except HTTPException:
+        raise
+
+    except FileNotFoundError:
+        logger.exception(
+            "Temporary audio file disappeared during ASR processing"
+        )
+
+        raise HTTPException(
+            status_code=400,
+            detail="Audio file could not be processed",
+        )
+
+    except ValueError:
+        logger.exception(
+            "Invalid audio supplied for ASR"
+        )
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or unsupported audio file",
+        )
+
+    except Exception:
+        logger.exception(
+            "ASR transcription failed"
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Audio transcription failed",
+        )
+
+    finally:
+        # ----------------------------------------------------
+        # Always remove temporary audio
+        # ----------------------------------------------------
+
+        if (
+            temporary_path is not None
+            and temporary_path.exists()
+        ):
+            try:
+                temporary_path.unlink()
+
+            except OSError:
+                logger.warning(
+                    "Could not remove temporary ASR file: %s",
+                    temporary_path,
+                )
+
+        await file.close()
+
+
+# ============================================================
+# PRE-SESSION TRANSCRIBE
+# ============================================================
+
+@router.post("/pre-session")
+async def transcribe_pre_session(
+    file: UploadFile = File(...),
+):
+    """
+    Transcribe short identification speech using Sarvam ASR.
+
+    This endpoint is used before a patient session exists,
+    for example on the Identify screen.
+
+    It does NOT:
+        - create a patient
+        - create a session
+        - store clinical data
+        - store the audio
+        - bypass the authenticated clinical ASR endpoint
+
+    It only sends the temporary audio file to Sarvam and
+    returns the transcription.
+    """
+
+    return await _transcribe_with_sarvam(file)
+
+
+# ============================================================
 # TRANSCRIBE AUDIO
 # ============================================================
 
@@ -104,7 +299,7 @@ async def transcribe_audio(
         raise
 
     # --------------------------------------------------------
-    # Validate Sarvam configuration
+    # Sarvam configuration
     # --------------------------------------------------------
 
     if not settings.sarvam_api_key:
