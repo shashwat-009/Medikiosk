@@ -117,6 +117,16 @@ export default function App() {
         />
 
         <Route
+          path="/doctor/sessions/:sessionId"
+          element={<SessionReview />}
+        />
+
+        <Route
+          path="/doctor/session/:sessionId/edit-summary"
+          element={<EditSummary />}
+        />
+
+        <Route
           path="/doctor/sessions/:sessionId/edit-summary"
           element={<EditSummary />}
         />

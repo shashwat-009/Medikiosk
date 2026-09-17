@@ -13,12 +13,14 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from dotenv import dotenv_values
+from app.config import ENV_FILE, settings
 from app.db.database import get_db
 from app.api.sessions import get_patient_session
 
 from ai.asr.audio import validate_audio_file
 from ai.asr.sarvam_asr import SarvamASRProvider
+from ai.asr.mock_asr import MockASRProvider
 
 
 router = APIRouter(
@@ -27,6 +29,30 @@ router = APIRouter(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _get_asr_provider():
+    """
+    Return SarvamASRProvider if a valid non-mock API key is configured;
+    otherwise fallback to MockASRProvider for offline/local development.
+    Dynamically re-reads .env so changes take effect immediately without restart.
+    """
+    env_vals = dotenv_values(ENV_FILE)
+    api_key = (
+        env_vals.get("SARVAM_API_KEY")
+        or os.getenv("SARVAM_API_KEY")
+        or settings.sarvam_api_key
+        or ""
+    ).strip()
+
+    if api_key and not api_key.lower().startswith("mock"):
+        os.environ["SARVAM_API_KEY"] = api_key
+        logger.info("Using live SarvamASRProvider with key: %s...", api_key[:8])
+        return SarvamASRProvider(api_key=api_key)
+
+    logger.info("Using MockASRProvider (mock or missing SARVAM_API_KEY detected)")
+    return MockASRProvider()
+
 
 # Keep this aligned with the existing Sarvam/ASR flow.
 # This prevents accidentally accepting arbitrarily large uploads.
@@ -126,33 +152,16 @@ async def _transcribe_with_sarvam(
         )
 
         # ----------------------------------------------------
-        # Sarvam configuration
+        # ASR provider & transcription
         # ----------------------------------------------------
 
-        if not settings.sarvam_api_key:
-            logger.error(
-                "SARVAM_API_KEY is not configured"
-            )
-
-            raise HTTPException(
-                status_code=500,
-                detail="Speech recognition service is not configured",
-            )
-
-        # Sarvam provider reads the API key from the environment.
-        os.environ["SARVAM_API_KEY"] = (
-            settings.sarvam_api_key
-        )
-
-        # ----------------------------------------------------
-        # Sarvam transcription
-        # ----------------------------------------------------
-
-        provider = SarvamASRProvider()
+        provider = _get_asr_provider()
 
         result = provider.transcribe(
             temporary_path
         )
+
+        logger.info("ASR transcribed text: %r (provider: %s)", result.text, result.provider)
 
         return result.model_dump()
 
@@ -299,25 +308,6 @@ async def transcribe_audio(
         raise
 
     # --------------------------------------------------------
-    # Sarvam configuration
-    # --------------------------------------------------------
-
-    if not settings.sarvam_api_key:
-        logger.error(
-            "SARVAM_API_KEY is not configured"
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail="Speech recognition service is not configured",
-        )
-
-    # Sarvam provider reads the API key from the environment.
-    os.environ["SARVAM_API_KEY"] = (
-        settings.sarvam_api_key
-    )
-
-    # --------------------------------------------------------
     # Validate uploaded file
     # --------------------------------------------------------
 
@@ -386,14 +376,16 @@ async def transcribe_audio(
         )
 
         # ----------------------------------------------------
-        # Sarvam transcription
+        # ASR provider & transcription
         # ----------------------------------------------------
 
-        provider = SarvamASRProvider()
+        provider = _get_asr_provider()
 
         result = provider.transcribe(
             temporary_path
         )
+
+        logger.info("ASR transcribed text: %r (provider: %s)", result.text, result.provider)
 
         return result.model_dump()
 

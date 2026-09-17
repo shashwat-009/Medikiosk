@@ -758,6 +758,22 @@
   cursor: not-allowed;
 }
 
+.doctor-loading__spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(62, 129, 123, 0.2);
+  border-top-color: #286963;
+  border-radius: 50%;
+  animation: doctor-spin 0.8s linear infinite;
+  margin-bottom: 8px;
+}
+
+@keyframes doctor-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .mk-edit-loading,
 .mk-edit-error {
   width: min(520px, calc(100% - 40px));

@@ -2,7 +2,11 @@ from pathlib import Path
 from typing import Any
 
 import cv2
-from paddleocr import PaddleOCR
+try:
+    from paddleocr import PaddleOCR
+except ImportError:
+    PaddleOCR = None
+
 
 
 # ============================================================
@@ -37,6 +41,11 @@ class OCREngine:
         print("=" * 60)
         print("                  OCR ENGINE")
         print("=" * 60)
+
+        if PaddleOCR is None:
+            raise RuntimeError(
+                "PaddleOCR is not installed. Please install PaddleOCR to perform OCR."
+            )
 
         print("Initializing PaddleOCR...")
 

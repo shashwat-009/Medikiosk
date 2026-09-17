@@ -22,6 +22,42 @@ const ENGLISH_NUMBER_WORDS = {
   sixty: 60, seventy: 70, eighty: 80, ninety: 90,
 };
 
+const HINDI_NUMBER_WORDS = {
+  "शून्य": 0, "एक": 1, "दो": 2, "तीन": 3, "चार": 4, "पांच": 5, "पाँच": 5,
+  "छह": 6, "छः": 6, "सात": 7, "आठ": 8, "नौ": 9, "दस": 10,
+  "ग्यारह": 11, "बारह": 12, "तेरह": 13, "चौदह": 14, "पंद्रह": 15,
+  "सोलह": 16, "सत्रह": 17, "अठारह": 18, "उन्नीस": 19, "बीस": 20,
+  "इक्कीस": 21, "बाईस": 22, "तेईस": 23, "चौबीस": 24, "पच्चीस": 25,
+  "छब्बीस": 26, "सत्ताईस": 27, "अट्ठाईस": 28, "उनतीस": 29, "तीस": 30,
+  "इकतीस": 31, "बत्तीस": 32, "तैंतीस": 33, "चौंतीस": 34, "पैंतीस": 35,
+  "छत्तीस": 36, "सैंतीस": 37, "अड़तीस": 38, "उनतालीस": 39, "चालीस": 40,
+  "पैंतालीस": 45, "पचास": 50, "पचपन": 55, "साठ": 60, "पैंसठ": 65,
+  "सत्तर": 70, "पचहत्तर": 75, "अस्सी": 80, "पचासी": 85, "नब्बे": 90, "पंचानवे": 95, "सौ": 100
+};
+
+const HINGLISH_NUMBER_WORDS = {
+  ek: 1, do: 2, teen: 3, char: 4, paanch: 5, panch: 5,
+  che: 6, chheh: 6, saat: 7, aath: 8, nau: 9, das: 10,
+  gyarah: 11, barah: 12, terah: 13, chaudah: 14, pandrah: 15,
+  solah: 16, satrah: 17, atharah: 18, unnees: 19, unnis: 19,
+  bees: 20, bis: 20,
+  ikkees: 21, ikkis: 21, baees: 22, bais: 22, teees: 23, teis: 23, chaubees: 24, chaubis: 24,
+  pachees: 25, pachis: 25, chhabees: 26, sattaees: 27, atthayees: 28, untees: 29,
+  tees: 30, iktees: 31, battees: 32, taintees: 33, chautees: 34, paintis: 35,
+  chhatees: 36, saintees: 37, adtees: 38, untalis: 39,
+  chalis: 40, iktalis: 41, bayalis: 42, tentalis: 43, chauvalis: 44, paintalis: 45,
+  pachas: 50, pachpan: 55,
+  saath: 60, sath: 60,
+  sattar: 70, pachhattar: 75,
+  assi: 80, pachasi: 85,
+  nabbe: 90, sau: 100,
+};
+
+const DEVANAGARI_DIGITS_MAP = {
+  '०': '0', '१': '1', '२': '2', '३': '3', '४': '4',
+  '५': '5', '६': '6', '७': '7', '८': '8', '९': '9',
+};
+
 const SPOKEN_DIGITS = {
   zero: "0", oh: "0", one: "1", two: "2", three: "3", four: "4",
   five: "5", six: "6", seven: "7", eight: "8", nine: "9",
@@ -31,17 +67,41 @@ const SPOKEN_DIGITS = {
 };
 
 function parseSpokenAge(text) {
-  const normalized = String(text || "").trim().toLowerCase();
+  if (!text) return null;
+
+  // Convert Devanagari numerals to 0-9
+  let normalized = String(text)
+    .replace(/[०-९]/g, (ch) => DEVANAGARI_DIGITS_MAP[ch] || ch)
+    .toLowerCase();
+
+  // Strip punctuation but keep spaces
+  normalized = normalized.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, " ").trim();
+
+  // Check direct digit match
   const digitMatch = normalized.match(/\b([1-9]|[1-9]\d|1[01]\d|120)\b/);
   if (digitMatch) return Number(digitMatch[1]);
 
-  const tokens = normalized.replace(/[-,]/g, " ").split(/\s+/).filter(Boolean);
+  // Check Hindi Devanagari words (e.g. "बीस")
+  for (const [word, val] of Object.entries(HINDI_NUMBER_WORDS)) {
+    if (normalized.includes(word) && val >= AGE_MIN && val <= AGE_MAX) {
+      return val;
+    }
+  }
+
+  // Check English, Hindi & Hinglish words (e.g. "twenty", "bees")
+  const tokens = normalized.split(/\s+/).filter(Boolean);
   let total = 0;
   let found = false;
 
   for (const token of tokens) {
     if (ENGLISH_NUMBER_WORDS[token] !== undefined) {
       total += ENGLISH_NUMBER_WORDS[token];
+      found = true;
+    } else if (HINDI_NUMBER_WORDS[token] !== undefined) {
+      total += HINDI_NUMBER_WORDS[token];
+      found = true;
+    } else if (HINGLISH_NUMBER_WORDS[token] !== undefined) {
+      total += HINGLISH_NUMBER_WORDS[token];
       found = true;
     }
   }
@@ -186,7 +246,9 @@ export default function Identify() {
   }
 
   function handleAgeVoice(text) {
+    console.log("Transcribed age voice received:", text);
     const age = parseSpokenAge(text);
+    console.log("Parsed age:", age);
 
     if (age !== null) {
       setAgeValue(age);

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -18,6 +19,8 @@ router = APIRouter(
     prefix="/conversation",
     tags=["Conversation"],
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -86,23 +89,41 @@ def require_conversation_session(
 _COMPLAINT_KEYWORDS = {
     "fever": (
         "fever",
+        "feverish",
         "temperature",
         "high temperature",
+        "pyrexia",
         "bukhar",
+        "bukhaar",
         "बुखार",
+        "ज्वर",
         "জ্বর",
         "বুকার",
         "ताप",
         "अंगात ताप",
+        "body heat",
     ),
     "chest_pain": (
         "chest pain",
         "pain in chest",
         "chest discomfort",
+        "chest pressure",
+        "chest tight",
         "seene mein dard",
+        "seene me dard",
         "seene ka dard",
+        "seena dard",
+        "seena me dard",
+        "chhati mein dard",
+        "chhati me dard",
+        "heart pain",
+        "heart ache",
+        "dil me dard",
+        "dil mein dard",
+        "angina",
         "सीने में दर्द",
         "सीने का दर्द",
+        "छाती में दर्द",
         "বুকে ব্যথা",
         "বুকে ব্যাথা",
         "বুকের ব্যথা",
@@ -112,32 +133,61 @@ _COMPLAINT_KEYWORDS = {
     ),
     "cough": (
         "cough",
+        "coughing",
+        "dry cough",
+        "wet cough",
+        "phlegm",
+        "balgam",
+        "kaph",
         "khansi",
         "khaansi",
+        "khasi",
         "खांसी",
         "खाँसी",
-        "কাশি",
-        "खोकला",
+        "काশি",
+        "খোকলা",
     ),
     "headache": (
         "headache",
         "head ache",
+        "head pain",
+        "migraine",
         "sir dard",
         "sar dard",
+        "sir me dard",
+        "sir mein dard",
+        "sar me dard",
+        "sar mein dard",
+        "sir ka dard",
+        "matha dard",
         "सिर दर्द",
         "सर दर्द",
-        "মাথাব্যথা",
+        "सिर में दर्द",
+        "सर में दर्द",
+        "माथাব্যথা",
         "মাথা ব্যথা",
         "डोकेदुखी",
         "डोके दुखणे",
     ),
     "abdominal_pain": (
         "abdominal pain",
+        "abdomen pain",
+        "abdominal",
         "stomach pain",
-        "belly pain",
         "stomach ache",
+        "stomach",
+        "belly pain",
+        "belly ache",
+        "tummy ache",
+        "tummy pain",
         "pet pain",
         "pet dard",
+        "pet me dard",
+        "pet mein dard",
+        "pet ka dard",
+        "gastric pain",
+        "gas pain",
+        "cramps",
         "पेट दर्द",
         "पेट में दर्द",
         "পেট ব্যথা",
@@ -330,7 +380,18 @@ def start_conversation(
         request.complaint
     )
 
+    logger.info(
+        "Starting conversation for session %s with complaint: %r (resolved to: %s)",
+        request.session_id,
+        request.complaint,
+        complaint,
+    )
+
     if complaint is None:
+        logger.warning(
+            "Chief complaint %r could not be mapped to supported complaints",
+            request.complaint,
+        )
         raise HTTPException(
             status_code=400,
             detail=(

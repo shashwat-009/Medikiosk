@@ -1,3 +1,12 @@
+import sys
+from pathlib import Path
+
+# Ensure backend directory is in sys.path (for app and ai packages)
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+_BACKEND_DIR_STR = str(_BACKEND_DIR)
+if _BACKEND_DIR_STR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR_STR)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,6 +35,63 @@ from app.api.auth import router as auth_router
 
 
 Base.metadata.create_all(bind=engine)
+
+
+def _seed_default_doctors():
+    """Ensure default active physicians exist for General Medicine and AYUSH departments."""
+    from app.db.database import SessionLocal
+    from pwdlib import PasswordHash
+
+    db = SessionLocal()
+    try:
+        has_general = (
+            db.query(Doctor)
+            .filter(Doctor.department.ilike("General Medicine"), Doctor.is_active.is_(True))
+            .first()
+        )
+        has_ayush = (
+            db.query(Doctor)
+            .filter(Doctor.department.ilike("AYUSH"), Doctor.is_active.is_(True))
+            .first()
+        )
+
+        p_hash = PasswordHash.recommended()
+        docs_to_add = []
+
+        if not has_general:
+            docs_to_add.append(
+                Doctor(
+                    name="Dr. Rajesh Sharma",
+                    specialization="General Medicine",
+                    department="General Medicine",
+                    password_hash=p_hash.hash("doctor123"),
+                    role="physician",
+                    is_active=True,
+                )
+            )
+
+        if not has_ayush:
+            docs_to_add.append(
+                Doctor(
+                    name="Dr. Ananya Verma",
+                    specialization="AYUSH (Ayurveda)",
+                    department="AYUSH",
+                    password_hash=p_hash.hash("doctor123"),
+                    role="physician",
+                    is_active=True,
+                )
+            )
+
+        if docs_to_add:
+            db.add_all(docs_to_add)
+            db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+_seed_default_doctors()
 
 
 app = FastAPI(

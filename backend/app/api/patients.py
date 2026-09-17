@@ -87,15 +87,19 @@ def get_patient_from_session_token(
             detail="Invalid patient session credential",
         )
 
+    expires_at = session.session_token_expires_at
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
     if (
-        session.session_token_expires_at is None
-        or session.session_token_expires_at
-        <= datetime.now(timezone.utc)
+        expires_at is None
+        or expires_at <= datetime.now(timezone.utc)
     ):
         raise HTTPException(
             status_code=401,
             detail="Patient session credential has expired",
         )
+
 
     if session.patient_id != patient_id:
         raise HTTPException(

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import json
 import secrets
 
@@ -113,20 +114,18 @@ def get_patient_session(
             detail="Invalid patient session token",
         )
 
-    if (
-        session.session_token_expires_at
-        is not None
-    ):
-        from datetime import datetime, timezone
+    expires_at = session.session_token_expires_at
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
 
-        if (
-            datetime.now(timezone.utc)
-            >= session.session_token_expires_at
-        ):
-            raise HTTPException(
-                status_code=401,
-                detail="Patient session token has expired",
-            )
+    if (
+        expires_at is None
+        or expires_at <= datetime.now(timezone.utc)
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Patient session token has expired",
+        )
 
     return session
 

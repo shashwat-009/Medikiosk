@@ -270,7 +270,10 @@ export default function EditSummary() {
 
     try {
       const data = await api(
-        `/doctors/${doctorId}/sessions/${sessionId}/review`
+        `/doctors/${doctorId}/sessions/${sessionId}/review`,
+        {
+          auth: "doctor",
+        }
       );
 
       setReview(data);
@@ -280,13 +283,33 @@ export default function EditSummary() {
         return;
       }
 
-      const parsed = JSON.parse(data.summary.content);
+      let parsed = null;
+      try {
+        parsed =
+          typeof data.summary.content === "string"
+            ? JSON.parse(data.summary.content)
+            : data.summary.content;
+      } catch (parseErr) {
+        console.error("Failed to parse summary content JSON:", parseErr);
+        setError("Invalid clinical summary format.");
+        setDraft(null);
+        return;
+      }
+
+      if (!parsed) {
+        setDraft(null);
+        return;
+      }
+
       setDraft(clone(parsed));
+
+      const sectionsObj =
+        parsed?.summary?.sections || parsed?.sections || {};
 
       const available = SECTION_META.find(
         (section) =>
-          Array.isArray(parsed?.summary?.sections?.[section.key]) &&
-          parsed.summary.sections[section.key].length > 0
+          Array.isArray(sectionsObj[section.key]) &&
+          sectionsObj[section.key].length > 0
       );
 
       if (available) {
@@ -300,17 +323,7 @@ export default function EditSummary() {
     }
   }
 
-  const sections = draft?.summary?.sections || {};
-
-  const availableSections = useMemo(
-    () =>
-      SECTION_META.filter((meta) => {
-        const value = sections[meta.key];
-
-        return Array.isArray(value) && value.length > 0;
-      }),
-    [sections]
-  );
+  const sections = draft?.summary?.sections || draft?.sections || {};
 
   const highlights = useMemo(
     () => interviewHighlights(review?.responses || []),
@@ -319,7 +332,6 @@ export default function EditSummary() {
 
   const activeMeta =
     SECTION_META.find((section) => section.key === activeKey) ||
-    availableSections[0] ||
     SECTION_META[0];
 
   const activeItems = Array.isArray(sections[activeMeta.key])
@@ -332,16 +344,30 @@ export default function EditSummary() {
   }
 
   function updateSection(key, nextValue) {
-    setDraft((current) => ({
-      ...current,
-      summary: {
-        ...current.summary,
+    setDraft((current) => {
+      if (!current) return current;
+
+      if (current.summary && typeof current.summary === "object") {
+        return {
+          ...current,
+          summary: {
+            ...current.summary,
+            sections: {
+              ...(current.summary.sections || {}),
+              [key]: nextValue,
+            },
+          },
+        };
+      }
+
+      return {
+        ...current,
         sections: {
-          ...current.summary.sections,
+          ...(current.sections || {}),
           [key]: nextValue,
         },
-      },
-    }));
+      };
+    });
 
     markDirty();
   }
@@ -400,6 +426,7 @@ export default function EditSummary() {
         body: JSON.stringify({
           content: JSON.stringify(draft),
         }),
+        auth: "doctor",
       });
 
       setDirty(false);
@@ -596,9 +623,12 @@ export default function EditSummary() {
           </div>
 
           <nav aria-label="Summary sections">
-            {availableSections.map((section) => {
+            {SECTION_META.map((section) => {
               const selected =
                 section.key === activeMeta.key;
+              const count = Array.isArray(sections[section.key])
+                ? sections[section.key].length
+                : 0;
 
               return (
                 <button
@@ -620,7 +650,7 @@ export default function EditSummary() {
                   </span>
 
                   <span className="mk-edit-nav-count">
-                    {sections[section.key].length}
+                    {count}
                   </span>
                 </button>
               );
