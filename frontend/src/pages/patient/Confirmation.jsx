@@ -448,13 +448,11 @@ export default function Confirmation() {
           <button
             type="button"
             className="confirmation__continue"
-            onClick={
-              handleContinue
-            }
-            disabled={
-              isCompleting ||
-              completed
-            }
+            onClick={handleContinue}
+            data-tts={translate(
+              language,
+              "confirmation.continue"
+            )}
           >
             {isCompleting
               ? translate(
@@ -468,14 +466,7 @@ export default function Confirmation() {
                     "confirmation.continue"
                   )}
 
-            {!isCompleting &&
-              !completed && (
-                <span
-                  aria-hidden="true"
-                >
-                  →
-                </span>
-              )}
+            <span data-no-tts aria-hidden="true">→</span>
           </button>
 
           {/* Patient reminder */}

@@ -342,8 +342,12 @@ export default function Documents() {
             className="documents__back"
             onClick={handleBack}
             disabled={isUploading}
+            data-tts={translate(
+              language,
+              "common.back"
+            )}
           >
-            ←{" "}
+            <span data-no-tts aria-hidden="true">← </span>
             {translate(
               language,
               "common.back"
@@ -528,6 +532,17 @@ export default function Documents() {
               className="documents__continue"
               onClick={handleContinue}
               disabled={isUploading}
+              data-tts={
+                isUploading
+                  ? translate(
+                    language,
+                    "common.loading"
+                  )
+                  : translate(
+                    language,
+                    "common.next"
+                  )
+              }
             >
 
               {isUploading
@@ -541,7 +556,7 @@ export default function Documents() {
                   )}
 
               {!isUploading && (
-                <span>→</span>
+                <span data-no-tts aria-hidden="true">→</span>
               )}
 
             </button>

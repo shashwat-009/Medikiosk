@@ -25,6 +25,7 @@ NOT perform any clinical/dialogue logic — it only converts text to audio.
 
 from __future__ import annotations
 
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Final
@@ -34,6 +35,51 @@ from edge_tts import Communicate
 from ai.tts.base import SynthesisError, TTSProvider, UnsupportedLanguageError
 from ai.tts.config import TTSConfig
 from ai.tts.schemas import SupportedLanguage, TTSRequest, TTSResponse, VoiceGender
+
+
+def sanitize_text_for_speech(text: str) -> str:
+    """Strip emojis, navigation arrows, UI symbols, and countdown timer strings
+    so Edge TTS does not speak icons or countdown numbers.
+    """
+    if not text:
+        return ""
+
+    cleaned = text
+    # 1. Remove arrows and navigation symbols
+    cleaned = re.sub(
+        r"[\u2190-\u21ff\u27f0-\u27ff\u2900-\u297f→←↑↓↔↕↖↗↘↙⇒⇐⇑⇓➜➔➤►◄▶◀›‹»«]",
+        "",
+        cleaned,
+    )
+
+    # 2. Remove common emojis and pictographs
+    cleaned = re.sub(
+        r"[\U00010000-\U0010ffff\u2600-\u26ff\u2700-\u27bf\ufe0e\ufe0f\u200d]",
+        "",
+        cleaned,
+    )
+
+    # 3. Remove UI bullet/icon symbols
+    cleaned = re.sub(r"[•●○★☆✓✔✕✖✗]", "", cleaned)
+
+    # 4. Remove countdown timer patterns (e.g., "10s", "(10s)", " 10 s ")
+    cleaned = re.sub(
+        r"\(\s*\d+\s*(?:s|sec|secs|seconds?|सेकंड|सेकण्ड)\s*\)",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"(?:^|\s)\d+\s*(?:s|sec|secs)\b", "", cleaned, flags=re.IGNORECASE
+    )
+
+    # 5. Remove leading/trailing symbols that act as icon buttons (+, ॐ)
+    cleaned = re.sub(r"^[\s+ॐ~#*^|\\/<>\-_–—]+", "", cleaned)
+    cleaned = re.sub(r"[\s+ॐ~#*^|\\/<>\-_–—]+$", "", cleaned)
+
+    # 6. Normalize whitespace
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned or text
 
 #: Identifier used to populate TTSResponse.provider for this provider.
 EDGE_TTS_PROVIDER_NAME: Final[str] = "edge_tts"
@@ -150,8 +196,10 @@ class EdgeTTSProvider(TTSProvider):
         filename = f"edge_{uuid.uuid4().hex}.{request.output_format.value}"
         audio_path = self._config.output_dir / filename
 
+        text_to_speak = sanitize_text_for_speech(request.text)
+
         try:
-            communicate = self._communicate_factory(request.text, voice=voice)
+            communicate = self._communicate_factory(text_to_speak, voice=voice)
             await communicate.save(str(audio_path))
         except UnsupportedLanguageError:
             raise

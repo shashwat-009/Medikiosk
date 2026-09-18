@@ -1,5 +1,5 @@
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ??
+  import.meta.env?.VITE_API_BASE_URL ??
   "http://localhost:8000";
 
 const LANGUAGE_MAP = {
@@ -89,13 +89,56 @@ async function generateAudio(text, languageCode) {
   return request;
 }
 
+/**
+ * Strips icons, emojis, pictographs, navigation symbols, and timer strings
+ * so TTS only speaks natural clinical and interface text.
+ */
+export function cleanTextForTTS(text) {
+  if (!text) {
+    return "";
+  }
+
+  let cleaned = String(text);
+
+  // 1. Remove emojis and pictographs (Extended_Pictographic covers standard emojis)
+  cleaned = cleaned.replace(/\p{Extended_Pictographic}/gu, "");
+
+  // 2. Remove common symbol / pictograph ranges, variation selectors, zero-width joiners
+  cleaned = cleaned.replace(
+    /[\u{1F300}-\u{1FAFF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+    ""
+  );
+  cleaned = cleaned.replace(/[\uFE0E\uFE0F\u200D]/g, "");
+
+  // 3. Remove arrows and directional UI characters (←, →, ↑, ↓, ↔, ↕, ↖, ↗, ↘, ↙, ⇒, ⇐, ➜, ➔, ➤, etc.)
+  cleaned = cleaned.replace(
+    /[\u2190-\u21FF\u27F0-\u27FF\u2900-\u297F→←↑↓↔↕↖↗↘↙⇒⇐⇑⇓➜➔➤►◄▶◀›‹»«]/g,
+    ""
+  );
+
+  // 4. Remove UI symbols commonly used as icons: bullets, stars, checkmarks, crosses, etc.
+  cleaned = cleaned.replace(/[•●○★☆✓✔✕✖✗]/g, "");
+
+  // 5. Remove countdown timer patterns (e.g., "10s", "9s", " 10 s ", "(10s)", "10sec", "10 sec")
+  cleaned = cleaned.replace(
+    /\(\s*\d+\s*(?:s|sec|secs|seconds?|सेकंड|सेकण्ड)\s*\)/gi,
+    ""
+  );
+  cleaned = cleaned.replace(/(?:^|\s)\d+\s*(?:s|sec|secs)\b/gi, "");
+
+  // 6. Remove leading/trailing symbols that are purely decorative icons (like standalone '+', 'ॐ', etc.)
+  cleaned = cleaned.replace(/^[\s+ॐ~#*^|\\/<>\-_–—]+/g, "");
+  cleaned = cleaned.replace(/[\s+ॐ~#*^|\\/<>\-_–—]+$/g, "");
+
+  // 7. Normalize whitespace
+  return cleaned.replace(/\s+/g, " ").trim();
+}
+
 export async function speakText(
   text,
   language
 ) {
-  const cleanText = String(
-    text ?? ""
-  ).trim();
+  const cleanText = cleanTextForTTS(text);
 
   if (!cleanText) {
     return;
