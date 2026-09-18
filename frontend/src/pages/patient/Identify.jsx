@@ -362,8 +362,9 @@ export default function Identify() {
             className="identify__back"
             onClick={() => navigate("/")}
             disabled={isSubmitting}
+            data-tts={t("common.back", "Back")}
           >
-            <span aria-hidden="true">←</span>
+            <span data-no-tts aria-hidden="true">←</span>
             {t("common.back", "Back")}
           </button>
 
@@ -633,6 +634,11 @@ export default function Identify() {
             type="submit"
             className="identify__continue"
             disabled={isSubmitting}
+            data-tts={
+              isSubmitting
+                ? t("common.loading", "Loading...")
+                : t("identify.continue", "Continue")
+            }
           >
             <span>
               {isSubmitting
@@ -640,7 +646,7 @@ export default function Identify() {
                 : t("identify.continue", "Continue")}
             </span>
 
-            {!isSubmitting && <span aria-hidden="true">→</span>}
+            {!isSubmitting && <span data-no-tts aria-hidden="true">→</span>}
           </button>
         </form>
       </section>

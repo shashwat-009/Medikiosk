@@ -101,6 +101,8 @@ export default function Welcome() {
               type="button"
               className="welcome__lang"
               onClick={() => handleLanguageSelect(item.code)}
+              data-tts={item.nativeName}
+              data-tts-language={item.code}
               aria-label={`Continue in ${item.name}`}
             >
               <span className="welcome__lang-native">

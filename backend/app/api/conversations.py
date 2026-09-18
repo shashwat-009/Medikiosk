@@ -226,6 +226,19 @@ def resolve_complaint(
     if normalized in supported:
         return normalized
 
+    if normalized in {
+        "other",
+        "others",
+        "general",
+        "अन्य",
+        "इतर",
+        "অন্যান্য",
+        "अन्य (others)",
+        "इतर (others)",
+        "অন্যান্য (others)",
+    }:
+        return "fever"
+
     for complaint, keywords in _COMPLAINT_KEYWORDS.items():
         if any(
             keyword in normalized

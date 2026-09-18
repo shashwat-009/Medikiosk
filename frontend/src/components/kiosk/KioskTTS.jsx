@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useKiosk } from "../../context/KioskContext";
-import { speakText } from "../../services/ttsService";
+import { speakText, cleanTextForTTS } from "../../services/ttsService";
 
 const LANGUAGE_MAP = {
   english: "en",
@@ -41,11 +41,10 @@ function getSpeechText(element) {
     return "";
   }
 
-  // Explicit TTS text has highest priority.
+  // 1. Explicit TTS text has highest priority.
   const explicitText = element.getAttribute("data-tts");
-
   if (explicitText) {
-    return normalize(explicitText);
+    return cleanTextForTTS(explicitText);
   }
 
   /*
@@ -57,16 +56,36 @@ function getSpeechText(element) {
    * Only use the native label.
    */
   const nativeLanguageLabel = element.querySelector(
-    ".kiosk-home__lang-native"
+    ".kiosk-home__lang-native, .welcome__lang-native"
   );
 
   if (nativeLanguageLabel) {
-    return normalize(nativeLanguageLabel.textContent);
+    return cleanTextForTTS(nativeLanguageLabel.textContent);
   }
 
-  return normalize(
-    element.innerText || element.textContent
-  );
+  // 3. aria-label has next priority
+  const ariaLabel = element.getAttribute("aria-label");
+  if (ariaLabel) {
+    return cleanTextForTTS(ariaLabel);
+  }
+
+  // 3. Clone element and strip elements marked as no-tts, aria-hidden, icons, or timers.
+  let rawText = "";
+  try {
+    const clone = element.cloneNode(true);
+    const nonSpeechNodes = clone.querySelectorAll(
+      "[data-no-tts], [aria-hidden='true'], [data-tts-ignore], svg, img, " +
+      ".interview__continue-timer-pill, [class*='timer'], [class*='countdown'], " +
+      ".interview__complaint-icon, [class*='icon'], [class*='arrow']"
+    );
+    nonSpeechNodes.forEach((node) => node.remove());
+
+    rawText = clone.innerText || clone.textContent || "";
+  } catch {
+    rawText = element.innerText || element.textContent || "";
+  }
+
+  return cleanTextForTTS(rawText);
 }
 
 function getSpeechLanguage(element, currentLanguage) {

@@ -120,8 +120,12 @@ export default function Consent() {
               navigate("/identify")
             }
             disabled={isSubmitting}
+            data-tts={translate(
+              language,
+              "common.back"
+            )}
           >
-            ←{" "}
+            <span data-no-tts aria-hidden="true">← </span>
             {translate(
               language,
               "common.back"
@@ -294,6 +298,17 @@ export default function Consent() {
             type="submit"
             className="consent__continue"
             disabled={isSubmitting}
+            data-tts={
+              isSubmitting
+                ? translate(
+                  language,
+                  "common.loading"
+                )
+                : translate(
+                  language,
+                  "consent.continue"
+                )
+            }
           >
 
             {isSubmitting
@@ -307,7 +322,7 @@ export default function Consent() {
               )}
 
             {!isSubmitting && (
-              <span>→</span>
+              <span data-no-tts aria-hidden="true">→</span>
             )}
 
           </button>

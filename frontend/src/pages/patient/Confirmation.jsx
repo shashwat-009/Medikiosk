@@ -229,13 +229,17 @@ export default function Confirmation() {
             type="button"
             className="confirmation__continue"
             onClick={handleContinue}
+            data-tts={translate(
+              language,
+              "confirmation.continue"
+            )}
           >
             {translate(
               language,
               "confirmation.continue"
             )}
 
-            <span aria-hidden="true">→</span>
+            <span data-no-tts aria-hidden="true">→</span>
           </button>
 
           {/* Patient reminder */}

@@ -95,8 +95,12 @@ export default function ModeSelection() {
               navigate("/consent")
             }
             disabled={isAssigning}
+            data-tts={translate(
+              language,
+              "common.back"
+            )}
           >
-            ←{" "}
+            <span data-no-tts aria-hidden="true">← </span>
             {translate(
               language,
               "common.back"
@@ -165,9 +169,13 @@ export default function ModeSelection() {
               )
             }
             disabled={isAssigning}
+            data-tts={translate(
+              language,
+              "mode.allopathy.title"
+            )}
           >
 
-            <div className="mode-selection__icon">
+            <div className="mode-selection__icon" data-no-tts aria-hidden="true">
               +
             </div>
 
@@ -189,7 +197,7 @@ export default function ModeSelection() {
 
             </div>
 
-            <span className="mode-selection__arrow">
+            <span className="mode-selection__arrow" data-no-tts aria-hidden="true">
               {isAssigning ? "..." : "→"}
             </span>
 
@@ -207,9 +215,13 @@ export default function ModeSelection() {
               )
             }
             disabled={isAssigning}
+            data-tts={translate(
+              language,
+              "mode.ayush.title"
+            )}
           >
 
-            <div className="mode-selection__icon">
+            <div className="mode-selection__icon" data-no-tts aria-hidden="true">
               ॐ
             </div>
 
@@ -231,7 +243,7 @@ export default function ModeSelection() {
 
             </div>
 
-            <span className="mode-selection__arrow">
+            <span className="mode-selection__arrow" data-no-tts aria-hidden="true">
               {isAssigning ? "..." : "→"}
             </span>
 

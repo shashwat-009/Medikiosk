@@ -16,13 +16,75 @@ import {
   stopSpeech,
 } from "../../services/ttsService";
 
-import ProgressTracker from "../../components/kiosk/ProgressTracker";
 import VoiceButton from "../../components/kiosk/VoiceButton";
 import TouchOptions from "../../components/kiosk/TouchOptions";
 import RedFlagOverlay from "../../components/kiosk/RedFlagOverlay";
 import InterviewQuestion from "../../components/patient/InterviewQuestion";
 
 import "./Interview.css";
+
+const CHIEF_COMPLAINT_OPTIONS = [
+  {
+    id: "fever",
+    icon: "🌡️",
+    labelByLang: {
+      en: "Fever",
+      hi: "बुखार (Fever)",
+      mr: "ताप (Fever)",
+      bn: "জ্বর (Fever)",
+    },
+  },
+  {
+    id: "cough",
+    icon: "💨",
+    labelByLang: {
+      en: "Cough",
+      hi: "खांसी (Cough)",
+      mr: "खोकला (Cough)",
+      bn: "কাশি (Cough)",
+    },
+  },
+  {
+    id: "headache",
+    icon: "🧠",
+    labelByLang: {
+      en: "Headache",
+      hi: "सिर दर्द (Headache)",
+      mr: "डोकेदुखी (Headache)",
+      bn: "মাথাব্যথা (Headache)",
+    },
+  },
+  {
+    id: "abdominal_pain",
+    icon: "🤢",
+    labelByLang: {
+      en: "Stomach Pain",
+      hi: "पेट दर्द (Stomach Pain)",
+      mr: "पोटदुखी (Stomach Pain)",
+      bn: "পেটে ব্যথা (Stomach Pain)",
+    },
+  },
+  {
+    id: "chest_pain",
+    icon: "❤️",
+    labelByLang: {
+      en: "Chest Pain",
+      hi: "सीने में दर्द (Chest Pain)",
+      mr: "छातीत दुखणे (Chest Pain)",
+      bn: "বুকে ব্যথা (Chest Pain)",
+    },
+  },
+  {
+    id: "other",
+    icon: "🩺",
+    labelByLang: {
+      en: "Others",
+      hi: "अन्य (Others)",
+      mr: "इतर (Others)",
+      bn: "অন্যান্য (Others)",
+    },
+  },
+];
 
 export default function Interview() {
   const navigate = useNavigate();
@@ -162,6 +224,18 @@ export default function Interview() {
     }
 
     return String(errorValue);
+  }
+
+  function getDisplayAnswer(val, lang) {
+    if (!val) return "";
+    if (!conversationStarted) {
+      const match = CHIEF_COMPLAINT_OPTIONS.find((opt) => opt.id === val);
+      if (match) {
+        const text = match.labelByLang[lang] || match.labelByLang.en;
+        return `${match.icon} ${text}`;
+      }
+    }
+    return val;
   }
 
   /*
@@ -603,14 +677,7 @@ export default function Interview() {
    */
 
   async function handleSkip() {
-    if (isSubmitting || isStarting) {
-      return;
-    }
-
-    if (!conversationStarted) {
-      const defaultComplaint =
-        language === "hi" ? "बुखार" : "fever";
-      await handleContinue(defaultComplaint);
+    if (isSubmitting || isStarting || !conversationStarted) {
       return;
     }
 
@@ -626,9 +693,9 @@ export default function Interview() {
    * ============================================================
    */
 
-  // 1. Inactivity Timer (60s) - counts down when no answer has been given yet
+  // 1. Inactivity Timer (60s) - counts down when no answer has been given yet (disabled for first question)
   useEffect(() => {
-    if (answer.trim()) {
+    if (!conversationStarted || answer.trim()) {
       return;
     }
 
@@ -648,9 +715,8 @@ export default function Interview() {
       setInactivitySeconds((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          const fallback = !conversationStartedRef.current
-            ? (language === "hi" ? "बुखार" : "fever")
-            : (translate(language, "interview.noResponse") || "No response");
+          const fallback =
+            translate(language, "interview.noResponse") || "No response";
 
           if (handleContinueRef.current) {
             handleContinueRef.current(fallback);
@@ -772,12 +838,13 @@ export default function Interview() {
             type="button"
             className="interview__back"
             onClick={handleBack}
+            data-tts={translate(language, "common.back")}
             disabled={
               isSubmitting ||
               isStarting
             }
           >
-            ←{" "}
+            <span data-no-tts aria-hidden="true">← </span>
             {translate(
               language,
               "common.back"
@@ -785,7 +852,7 @@ export default function Interview() {
           </button>
 
           <div className="interview__header-tools">
-            {!answer.trim() && (
+            {conversationStarted && !answer.trim() && (
               <div
                 className={`interview__timer-badge ${
                   inactivitySeconds <= 15
@@ -798,15 +865,6 @@ export default function Interview() {
                 <span>{inactivitySeconds}s</span>
               </div>
             )}
-
-            <ProgressTracker
-              current={
-                conversationStarted
-                  ? questionNumber + 1
-                  : 1
-              }
-              total={10}
-            />
           </div>
 
         </header>
@@ -869,7 +927,7 @@ export default function Interview() {
                 "interview.listenQuestion"
               )}
             >
-              🔊{" "}
+              <span data-no-tts aria-hidden="true">🔊 </span>
               {translate(
                 language,
                 "interview.listenQuestion"
@@ -915,47 +973,63 @@ export default function Interview() {
 
           </div>
 
-          {/* Chief Complaint quick selection chips */}
+          {/* Chief Complaint options (Question 1) */}
           {!conversationStarted && (
-            <div style={{ margin: "20px 0" }}>
-              <p style={{ fontSize: "14px", fontWeight: "600", color: "var(--muted)", marginBottom: "12px" }}>
-                {language === "hi" ? "👇 या नीचे दिए गए मुख्य लक्षणों में से चुनें:" : "👇 Or select a common symptom below:"}
+            <div className="interview__complaints">
+              <p className="interview__complaints-label">
+                <span>👇</span>
+                <span>
+                  {language === "hi"
+                    ? "मुख्य लक्षणों में से चुनें:"
+                    : language === "mr"
+                    ? "मुख्य लक्षणांमधून निवडा:"
+                    : language === "bn"
+                    ? "প্রধান উপসর্গ থেকে নির্বাচন করুন:"
+                    : "Select your main symptom:"}
+                </span>
               </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-                {[
-                  { id: "fever", label: language === "hi" ? "🌡️ बुखार (Fever)" : "🌡️ Fever" },
-                  { id: "cough", label: language === "hi" ? "💨 खांसी (Cough)" : "💨 Cough" },
-                  { id: "headache", label: language === "hi" ? "🧠 सिर दर्द (Headache)" : "🧠 Headache" },
-                  { id: "abdominal_pain", label: language === "hi" ? "🤢 पेट दर्द (Stomach Pain)" : "🤢 Stomach Pain" },
-                  { id: "chest_pain", label: language === "hi" ? "❤️ सीने में दर्द (Chest Pain)" : "❤️ Chest Pain" },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setAnswer(item.id);
-                      setInputType("touch");
-                      setInputMode("answered");
-                      setAutoAdvanceSeconds(10);
-                      setIsPaused(false);
-                      setError("");
-                    }}
-                    style={{
-                      padding: "10px 18px",
-                      borderRadius: "24px",
-                      border: answer === item.id ? "2px solid #0d9488" : "1px solid #cbd5e1",
-                      background: answer === item.id ? "#f0fdfa" : "#ffffff",
-                      color: answer === item.id ? "#0f766e" : "#334155",
-                      fontWeight: answer === item.id ? "700" : "500",
-                      fontSize: "15px",
-                      cursor: "pointer",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+
+              <div className="interview__complaints-grid">
+                {CHIEF_COMPLAINT_OPTIONS.map((item) => {
+                  const isSelected = answer === item.id;
+                  const isDisabled = item.id === "other";
+                  const label =
+                    item.labelByLang[language] || item.labelByLang.en;
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`interview__complaint-btn ${
+                        isSelected ? "interview__complaint-btn--selected" : ""
+                      } ${isDisabled ? "interview__complaint-btn--disabled" : ""}`}
+                      data-tts={label}
+                      disabled={isDisabled}
+                      aria-disabled={isDisabled}
+                      onClick={() => {
+                        if (isDisabled) return;
+                        setAnswer(item.id);
+                        setInputType("touch");
+                        setInputMode("answered");
+                        setAutoAdvanceSeconds(10);
+                        setIsPaused(false);
+                        setError("");
+                      }}
+                      aria-pressed={isSelected}
+                    >
+                      <span
+                        className="interview__complaint-icon"
+                        data-no-tts
+                        aria-hidden="true"
+                      >
+                        {item.icon}
+                      </span>
+                      <span className="interview__complaint-text">
+                        {label}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -985,9 +1059,9 @@ export default function Interview() {
             />
           )}
 
-          {/* Text */}
+          {/* Text - only rendered for subsequent questions when touch options are not available */}
 
-          {!hasTouchOptions && (
+          {conversationStarted && !hasTouchOptions && (
             <>
               <div className="interview__divider">
                 <span>
@@ -1032,7 +1106,7 @@ export default function Interview() {
               </span>
 
               <p>
-                {answer}
+                {getDisplayAnswer(answer, language)}
               </p>
 
             </div>
@@ -1064,8 +1138,12 @@ export default function Interview() {
                   type="button"
                   className="interview__pause-btn"
                   onClick={() => setIsPaused((prev) => !prev)}
+                  data-tts={isPaused ? "Resume" : "Pause"}
                 >
-                  {isPaused ? "▶️ Resume" : "⏸️ Pause"}
+                  <span data-no-tts aria-hidden="true">
+                    {isPaused ? "▶️ " : "⏸️ "}
+                  </span>
+                  {isPaused ? "Resume" : "Pause"}
                 </button>
               </div>
 
@@ -1085,25 +1163,32 @@ export default function Interview() {
 
           {/* Actions */}
 
-          <div className="interview__actions">
+          <div
+            className={`interview__actions ${
+              !conversationStarted ? "interview__actions--mandatory" : ""
+            }`}
+          >
 
-            <button
-              type="button"
-              className="interview__skip"
-              onClick={handleSkip}
-              disabled={
-                isSubmitting ||
-                isStarting
-              }
-            >
-              <span>⏭️</span>
-              <span>
-                {translate(
-                  language,
-                  "interview.skip"
-                )}
-              </span>
-            </button>
+            {conversationStarted && (
+              <button
+                type="button"
+                className="interview__skip"
+                onClick={handleSkip}
+                data-tts={translate(language, "interview.skip")}
+                disabled={
+                  isSubmitting ||
+                  isStarting
+                }
+              >
+                <span data-no-tts aria-hidden="true">⏭️ </span>
+                <span>
+                  {translate(
+                    language,
+                    "interview.skip"
+                  )}
+                </span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -1113,9 +1198,15 @@ export default function Interview() {
                   : ""
               }`}
               onClick={() => handleContinue()}
+              data-tts={
+                isSubmitting || isStarting
+                  ? translate(language, "common.loading")
+                  : translate(language, "interview.continue")
+              }
               disabled={
                 isSubmitting ||
-                isStarting
+                isStarting ||
+                (!conversationStarted && !answer.trim())
               }
             >
 
@@ -1133,14 +1224,18 @@ export default function Interview() {
                     )}
 
                     {answer.trim() && !isPaused && (
-                      <span className="interview__continue-timer-pill">
+                      <span
+                        className="interview__continue-timer-pill"
+                        data-no-tts
+                        aria-hidden="true"
+                      >
                         {autoAdvanceSeconds}s
                       </span>
                     )}
 
                     {!isSubmitting &&
                       !isStarting && (
-                        <span>→</span>
+                        <span data-no-tts aria-hidden="true">→</span>
                       )}
                   </>
                 )}
