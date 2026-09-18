@@ -34,7 +34,18 @@ router = APIRouter(
 # Configuration
 # ============================================================
 
+# Lifetime of the patient-session credential itself.
+#
+# This is separate from the consultation session lifetime.
 PATIENT_TOKEN_EXPIRE_MINUTES = 60
+
+# Maximum amount of inactivity allowed before an active
+# consultation becomes expired and can no longer be resumed.
+SESSION_INACTIVITY_TIMEOUT_MINUTES = 15
+
+# Maximum total lifetime of one consultation session.
+SESSION_MAX_DURATION_MINUTES = 120
+
 
 # Optional bearer authentication.
 #
@@ -64,6 +75,195 @@ def hash_patient_token(token: str) -> str:
     ).hexdigest()
 
 
+def _normalize_datetime(
+    value: datetime | None,
+) -> datetime | None:
+    """
+    Normalize a database datetime to timezone-aware UTC.
+
+    PostgreSQL/Supabase normally returns timezone-aware values,
+    but older rows or SQLite-based tests may contain naive
+    datetimes.
+    """
+
+    if value is None:
+        return None
+
+    if value.tzinfo is None:
+        return value.replace(
+            tzinfo=timezone.utc
+        )
+
+    return value.astimezone(timezone.utc)
+
+
+def _issue_patient_token(
+    session: SessionModel,
+    now: datetime,
+) -> tuple[str, datetime]:
+    """
+    Generate a fresh patient-session credential.
+
+    Only the hash is stored in the database.
+    The raw token is returned to the caller.
+
+    This is used both when creating a new session and when
+    resuming an existing session after patient re-login.
+    """
+
+    patient_token = secrets.token_urlsafe(32)
+
+    session.session_token_hash = hash_patient_token(
+        patient_token
+    )
+
+    token_expires_at = (
+        now
+        + timedelta(
+            minutes=PATIENT_TOKEN_EXPIRE_MINUTES
+        )
+    )
+
+    session.session_token_expires_at = (
+        token_expires_at
+    )
+
+    return (
+        patient_token,
+        token_expires_at,
+    )
+
+
+def _session_is_resumable(
+    session: SessionModel,
+    now: datetime,
+) -> bool:
+    """
+    Determine whether an existing session can be resumed.
+
+    A session is resumable only when:
+
+    - status is active
+    - maximum consultation lifetime has not elapsed
+    - inactivity timeout has not elapsed
+
+    The patient-session token itself is deliberately NOT checked
+    here because a successful re-login issues a fresh token.
+    """
+
+    if session.status != "active":
+        return False
+
+    # --------------------------------------------------------
+    # Maximum consultation lifetime
+    # --------------------------------------------------------
+
+    expires_at = _normalize_datetime(
+        session.expires_at
+    )
+
+    if (
+        expires_at is not None
+        and expires_at <= now
+    ):
+        return False
+
+    # --------------------------------------------------------
+    # Inactivity timeout
+    # --------------------------------------------------------
+
+    last_activity_at = _normalize_datetime(
+        session.last_activity_at
+    )
+
+    if (
+        last_activity_at is not None
+        and last_activity_at
+        <= now
+        - timedelta(
+            minutes=SESSION_INACTIVITY_TIMEOUT_MINUTES
+        )
+    ):
+        return False
+
+    return True
+
+
+def _find_resumable_patient_session(
+    patient_id: int,
+    db: Session,
+) -> SessionModel | None:
+    """
+    Find the latest active resumable session for a patient.
+
+    The latest activity is preferred.
+
+    Completed sessions are never returned.
+
+    Sessions that are active in the database but have already
+    exceeded the inactivity or maximum lifetime are marked
+    expired during this lookup.
+
+    This also protects against duplicate active sessions that
+    may have been created by older versions of the application.
+    """
+
+    now = datetime.now(timezone.utc)
+
+    active_sessions = (
+        db.query(SessionModel)
+        .filter(
+            SessionModel.patient_id == patient_id,
+            SessionModel.status == "active",
+        )
+        .order_by(
+            SessionModel.last_activity_at.desc(),
+            SessionModel.id.desc(),
+        )
+        .with_for_update()
+        .all()
+    )
+
+    resumable_session = None
+    changed = False
+
+    for session in active_sessions:
+
+        if _session_is_resumable(
+            session,
+            now,
+        ):
+            if resumable_session is None:
+                resumable_session = session
+
+            continue
+
+        # The session is marked active in the database but
+        # is no longer valid because its lifecycle has ended.
+        session.status = "expired"
+        changed = True
+
+    if changed:
+        try:
+            db.commit()
+
+        except IntegrityError:
+            db.rollback()
+
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Could not update expired patient sessions"
+                ),
+            )
+
+    return resumable_session
+
+
+# ============================================================
+# Patient Session Authentication
+# ============================================================
+
 def get_patient_session(
     session_id: int,
     patient_token: str,
@@ -73,11 +273,14 @@ def get_patient_session(
     Validate a patient-session credential.
 
     The credential is valid only when:
+
     - the session exists
     - the session is active
     - the session has a stored token hash
     - the supplied token matches
     - the token has not expired
+    - the consultation has not exceeded its maximum lifetime
+    - the consultation has not exceeded its inactivity timeout
     """
 
     if not patient_token or not patient_token.strip():
@@ -88,7 +291,9 @@ def get_patient_session(
 
     session = (
         db.query(SessionModel)
-        .filter(SessionModel.id == session_id)
+        .filter(
+            SessionModel.id == session_id
+        )
         .first()
     )
 
@@ -98,17 +303,91 @@ def get_patient_session(
             detail="Session not found",
         )
 
+    # --------------------------------------------------------
+    # Session lifecycle
+    # --------------------------------------------------------
+
     if session.status != "active":
         raise HTTPException(
             status_code=401,
             detail="Session is no longer active",
         )
 
+    now = datetime.now(timezone.utc)
+
+    # --------------------------------------------------------
+    # Maximum consultation lifetime
+    # --------------------------------------------------------
+
+    expires_at = _normalize_datetime(
+        session.expires_at
+    )
+
+    if (
+        expires_at is not None
+        and expires_at <= now
+    ):
+        session.status = "expired"
+        session.session_token_hash = None
+        session.session_token_expires_at = None
+
+        try:
+            db.commit()
+
+        except IntegrityError:
+            db.rollback()
+
+        raise HTTPException(
+            status_code=401,
+            detail="Session has expired",
+        )
+
+    # --------------------------------------------------------
+    # Inactivity timeout
+    # --------------------------------------------------------
+
+    last_activity_at = _normalize_datetime(
+        session.last_activity_at
+    )
+
+    if (
+        last_activity_at is not None
+        and last_activity_at
+        <= now
+        - timedelta(
+            minutes=SESSION_INACTIVITY_TIMEOUT_MINUTES
+        )
+    ):
+        session.status = "expired"
+        session.session_token_hash = None
+        session.session_token_expires_at = None
+
+        try:
+            db.commit()
+
+        except IntegrityError:
+            db.rollback()
+
+        raise HTTPException(
+            status_code=401,
+            detail="Session expired due to inactivity",
+        )
+
+    # --------------------------------------------------------
+    # Token existence
+    # --------------------------------------------------------
+
     if not session.session_token_hash:
         raise HTTPException(
             status_code=401,
-            detail="Patient session credential is not available",
+            detail=(
+                "Patient session credential is not available"
+            ),
         )
+
+    # --------------------------------------------------------
+    # Validate supplied token
+    # --------------------------------------------------------
 
     provided_token_hash = hash_patient_token(
         patient_token
@@ -123,19 +402,41 @@ def get_patient_session(
             detail="Invalid patient session credential",
         )
 
-    expires_at = session.session_token_expires_at
-    if expires_at is not None and expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    # --------------------------------------------------------
+    # Validate token lifetime
+    # --------------------------------------------------------
+
+    token_expires_at = _normalize_datetime(
+        session.session_token_expires_at
+    )
 
     if (
-        expires_at is None
-        or expires_at <= datetime.now(timezone.utc)
+        token_expires_at is None
+        or token_expires_at <= now
     ):
         raise HTTPException(
             status_code=401,
-            detail="Patient session credential has expired",
+            detail=(
+                "Patient session credential has expired"
+            ),
         )
 
+    # --------------------------------------------------------
+    # Successful authenticated request counts as activity.
+    # --------------------------------------------------------
+
+    session.last_activity_at = now
+
+    try:
+        db.commit()
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=409,
+            detail="Could not update session activity",
+        )
 
     return session
 
@@ -164,7 +465,9 @@ def get_authenticated_actor(
         raise HTTPException(
             status_code=401,
             detail="Authentication credentials required",
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={
+                "WWW-Authenticate": "Bearer"
+            },
         )
 
     subject, role = decode_token(
@@ -186,7 +489,9 @@ def get_authenticated_actor(
 
         doctor = (
             db.query(Doctor)
-            .filter(Doctor.id == doctor_id)
+            .filter(
+                Doctor.id == doctor_id
+            )
             .first()
         )
 
@@ -295,10 +600,13 @@ def require_session_view_access(
         return session
 
     if role == "physician":
+
         if session.doctor_id != actor.id:
             raise HTTPException(
                 status_code=403,
-                detail="You are not assigned to this session",
+                detail=(
+                    "You are not assigned to this session"
+                ),
             )
 
         return session
@@ -310,7 +618,7 @@ def require_session_view_access(
 
 
 # ============================================================
-# Create Session
+# Create OR Resume Session
 # ============================================================
 
 @router.post(
@@ -322,15 +630,69 @@ def create_session(
     db: Session = Depends(get_db),
 ):
     """
-    Create a new patient consultation session.
+    Create or resume a patient consultation session.
 
-    This remains an intentional bootstrap endpoint because
-    the patient does not have a patient-session credential yet.
+    This is intentionally an unauthenticated bootstrap endpoint
+    because the patient does not have a patient-session credential
+    before login.
 
-    A short-lived opaque patient credential is generated.
-    Only its hash is stored in the database.
-    The raw credential is returned once.
+    Behavior:
+
+    ------------------------------------------------------------
+    Existing resumable session
+    ------------------------------------------------------------
+
+    If the patient has an active session and has been inactive
+    for LESS than 15 minutes:
+
+        -> resume the SAME session
+
+        -> same session ID
+        -> same conversation_state
+        -> same previous responses
+        -> same doctor assignment
+        -> fresh patient token
+        -> refreshed last_activity_at
+
+    ------------------------------------------------------------
+    Expired/inactive session
+    ------------------------------------------------------------
+
+    If the patient's existing active session has been inactive
+    for 15 minutes or longer:
+
+        -> mark it expired
+        -> create a new session
+
+    ------------------------------------------------------------
+    Completed session
+    ------------------------------------------------------------
+
+    Completed sessions are NEVER resumed.
+
+    A new consultation creates a new session.
+
+    ------------------------------------------------------------
+    Maximum lifetime
+    ------------------------------------------------------------
+
+    A session cannot be resumed after its 120-minute maximum
+    consultation lifetime.
+
+    ------------------------------------------------------------
+    Token behavior
+    ------------------------------------------------------------
+
+    Every successful login receives a fresh patient-session
+    credential.
+
+    The raw credential is returned only in this response.
+    Only the SHA-256 hash is stored in the database.
     """
+
+    # --------------------------------------------------------
+    # Validate patient.
+    # --------------------------------------------------------
 
     patient = (
         db.query(Patient)
@@ -346,8 +708,10 @@ def create_session(
             detail="Patient not found",
         )
 
-    # If a doctor was explicitly supplied, verify it exists
-    # and is active.
+    # --------------------------------------------------------
+    # Validate explicitly supplied doctor.
+    # --------------------------------------------------------
+
     if session_data.doctor_id is not None:
 
         doctor = (
@@ -370,28 +734,106 @@ def create_session(
                 detail="Cannot assign an inactive doctor",
             )
 
-    # Generate high-entropy patient credential.
+    # --------------------------------------------------------
+    # Try to resume an existing patient session.
+    # --------------------------------------------------------
+
+    existing_session = (
+        _find_resumable_patient_session(
+            patient_id=patient.id,
+            db=db,
+        )
+    )
+
+    now = datetime.now(timezone.utc)
+
+    if existing_session is not None:
+
+        # ----------------------------------------------------
+        # RESUME EXISTING SESSION
+        # ----------------------------------------------------
+
+        patient_token, token_expires_at = (
+            _issue_patient_token(
+                existing_session,
+                now,
+            )
+        )
+
+        # The successful login itself is activity.
+        existing_session.last_activity_at = now
+
+        # IMPORTANT:
+        #
+        # Do NOT overwrite:
+        #   - conversation_state
+        #   - doctor_id
+        #   - responses
+        #   - session ID
+        #   - complaint
+        #   - language
+        #   - mode
+        #
+        # The consultation must continue exactly where it stopped.
+
+        try:
+            db.commit()
+
+        except IntegrityError:
+            db.rollback()
+
+            raise HTTPException(
+                status_code=409,
+                detail="Could not resume patient session",
+            )
+
+        db.refresh(existing_session)
+
+        return {
+            "id": existing_session.id,
+            "patient_id": existing_session.patient_id,
+            "doctor_id": existing_session.doctor_id,
+            "status": existing_session.status,
+            "created_at": existing_session.created_at,
+            "patient_token": patient_token,
+            "patient_token_expires_at": token_expires_at,
+        }
+
+    # --------------------------------------------------------
+    # CREATE NEW SESSION
+    # --------------------------------------------------------
+
     patient_token = secrets.token_urlsafe(32)
 
-    # Store only the hash.
     patient_token_hash = hash_patient_token(
         patient_token
     )
 
-    # Short-lived credential.
-    expires_at = (
-        datetime.now(timezone.utc)
+    token_expires_at = (
+        now
         + timedelta(
             minutes=PATIENT_TOKEN_EXPIRE_MINUTES
         )
     )
 
+    session_expires_at = (
+        now
+        + timedelta(
+            minutes=SESSION_MAX_DURATION_MINUTES
+        )
+    )
+
     new_session = SessionModel(
-        patient_id=session_data.patient_id,
+        patient_id=patient.id,
         doctor_id=session_data.doctor_id,
         status="active",
         session_token_hash=patient_token_hash,
-        session_token_expires_at=expires_at,
+        session_token_expires_at=token_expires_at,
+        last_activity_at=now,
+        expires_at=session_expires_at,
+        complaint=getattr(session_data, "complaint", None),
+        language=getattr(session_data, "language", None),
+        mode=getattr(session_data, "mode", None),
     )
 
     db.add(new_session)
@@ -416,7 +858,7 @@ def create_session(
         "status": new_session.status,
         "created_at": new_session.created_at,
         "patient_token": patient_token,
-        "patient_token_expires_at": expires_at,
+        "patient_token_expires_at": token_expires_at,
     }
 
 
@@ -471,7 +913,9 @@ def assign_doctor(
     if session.status != "active":
         raise HTTPException(
             status_code=400,
-            detail="Cannot assign a doctor to an inactive session",
+            detail=(
+                "Cannot assign a doctor to an inactive session"
+            ),
         )
 
     # --------------------------------------------------------
@@ -564,6 +1008,94 @@ def assign_doctor(
     db.refresh(session)
 
     return session
+
+
+# ============================================================
+# Complete Session
+# ============================================================
+
+@router.post(
+    "/{session_id}/complete",
+)
+def complete_session(
+    session_id: int,
+    patient_token: str | None = Header(
+        default=None,
+        alias="X-Patient-Session-Token",
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    Complete the authenticated patient's consultation session.
+
+    The patient must provide the valid session credential for
+    this exact session.
+
+    Completion is idempotent: an already completed session is
+    returned without changing its completion timestamp.
+    """
+
+    session = (
+        db.query(SessionModel)
+        .filter(
+            SessionModel.id == session_id
+        )
+        .first()
+    )
+
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
+
+    if session.status == "completed":
+        return {
+            "message": "Session already completed",
+            "session_id": session.id,
+            "status": session.status,
+            "completed_at": session.completed_at,
+        }
+
+    if session.status != "active":
+        raise HTTPException(
+            status_code=400,
+            detail="Only active sessions can be completed",
+        )
+
+    # Validate the patient's credential and lifecycle state.
+    get_patient_session(
+        session_id,
+        patient_token,
+        db,
+    )
+
+    session.status = "completed"
+    session.completed_at = datetime.now(timezone.utc)
+
+    # Completed consultations must not retain a usable patient credential.
+    session.session_token_hash = None
+    session.session_token_expires_at = None
+
+    try:
+        db.commit()
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=409,
+            detail="Could not complete session",
+        )
+
+    db.refresh(session)
+
+    return {
+        "message": "Session completed successfully",
+        "session_id": session.id,
+        "status": session.status,
+        "completed_at": session.completed_at,
+    }
 
 
 # ============================================================

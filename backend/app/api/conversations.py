@@ -9,6 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.api.sessions import get_patient_session
 from app.db.database import get_db
+from app.models.session import Session as SessionModel
+from app.models.response import Response
+from app.services.conversation_state import (
+    deserialize_dialogue_state,
+    serialize_dialogue_state,
+)
 
 from ai.conversation.ayush_mode import AyushMode
 from ai.conversation.dialogue_manager import DialogueManager
@@ -24,10 +30,53 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# In-memory conversation store
+# Persistent conversation state helpers
 # ---------------------------------------------------------------------------
 
-_managers: dict[int, DialogueManager] = {}
+def build_manager_from_session(session: SessionModel) -> DialogueManager:
+    if not session.conversation_state:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "No active conversation found for this session. "
+                "Start the conversation first."
+            ),
+        )
+
+    try:
+        state = deserialize_dialogue_state(session.conversation_state)
+        language = QuestionLanguage(session.language or "en")
+    except (ValueError, TypeError, KeyError) as exc:
+        logger.exception(
+            "Invalid persisted conversation state for session %s",
+            session.id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Stored conversation state is invalid.",
+        ) from exc
+
+    ayush_mode = (
+        AyushMode()
+        if (session.mode or "allopathy") == "ayush"
+        else None
+    )
+
+    return DialogueManager(
+        state,
+        language=language,
+        ayush_mode=ayush_mode,
+    )
+
+
+def persist_conversation_state(
+    session: SessionModel,
+    manager: DialogueManager,
+    db: Session,
+) -> None:
+    session.conversation_state = serialize_dialogue_state(manager.state)
+    db.add(session)
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -348,7 +397,7 @@ def start_conversation(
     # Authenticate patient session
     # ---------------------------------------------------------------
 
-    require_conversation_session(
+    session = require_conversation_session(
         session_id=request.session_id,
         patient_token=x_patient_session_token,
         db=db,
@@ -439,14 +488,18 @@ def start_conversation(
         ayush_mode=ayush_mode,
     )
 
-    # Replace any existing manager for this session.
-    _managers[request.session_id] = manager
-
     # ---------------------------------------------------------------
     # Start interview
     # ---------------------------------------------------------------
 
     question = manager.start()
+
+    session.complaint = complaint
+    session.language = language.value
+    session.mode = normalized_mode
+    session.conversation_state = serialize_dialogue_state(manager.state)
+    db.add(session)
+    db.commit()
 
     return {
         "session_id": request.session_id,
@@ -485,28 +538,17 @@ def answer_conversation(
     # Authenticate patient session
     # ---------------------------------------------------------------
 
-    require_conversation_session(
+    session = require_conversation_session(
         session_id=request.session_id,
         patient_token=x_patient_session_token,
         db=db,
     )
 
     # ---------------------------------------------------------------
-    # Find conversation
+    # Load conversation state
     # ---------------------------------------------------------------
 
-    manager = _managers.get(
-        request.session_id
-    )
-
-    if manager is None:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "No active conversation found for this session. "
-                "Start the conversation first."
-            ),
-        )
+    manager = build_manager_from_session(session)
 
     # ---------------------------------------------------------------
     # Validate answer
@@ -585,6 +627,32 @@ def answer_conversation(
             detail=str(exc),
         ) from exc
 
+    # Persist both the updated conversation state and the answer
+    # history in the same database transaction.
+    session.conversation_state = serialize_dialogue_state(
+        manager.state
+    )
+    db.add(session)
+
+    db.add(
+        Response(
+            session_id=session.id,
+            question=(
+                request.question_id
+                or request.field_id
+            ),
+            answer=str(request.answer),
+            input_type=input_type,
+            language=manager.language.value,
+        )
+    )
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
     return serialize_result(
         result,
         manager.language.value,
@@ -614,29 +682,27 @@ def get_next_question(
     # Authenticate patient session
     # ---------------------------------------------------------------
 
-    require_conversation_session(
+    session = require_conversation_session(
         session_id=session_id,
         patient_token=x_patient_session_token,
         db=db,
     )
 
     # ---------------------------------------------------------------
-    # Find conversation
+    # Load conversation state
     # ---------------------------------------------------------------
 
-    manager = _managers.get(
-        session_id
-    )
-
-    if manager is None:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "No active conversation found for this session."
-            ),
-        )
+    manager = build_manager_from_session(session)
 
     question = manager.get_next_question()
+
+    # get_next_question() updates the current-question state,
+    # so persist it before returning.
+    persist_conversation_state(
+        session,
+        manager,
+        db,
+    )
 
     return {
         "question": serialize_question(

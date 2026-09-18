@@ -1769,13 +1769,21 @@ def test_asr_provider_can_be_mocked(client, session, monkeypatch):
     import app.api.asr as asr_api
 
     class FakeResult:
+        text = "namaste"
+        language = "hi"
+        provider = "fake"
+
         def model_dump(self):
             return {
-                "text": "namaste",
-                "language": "hi",
+                "text": self.text,
+                "language": self.language,
+                "provider": self.provider,
             }
 
     class FakeProvider:
+        def __init__(self, api_key=None):
+            pass
+
         def transcribe(self, path):
             assert Path(path).exists()
             return FakeResult()

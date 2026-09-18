@@ -5,11 +5,18 @@ import {
 } from "./api";
 
 /**
- * Create a new patient consultation session.
+ * Create or resume a patient consultation session.
  *
- * Session creation is intentionally unauthenticated.
- * The backend creates the short-lived patient-session
- * credential and returns it once.
+ * Backend behavior:
+ *
+ * - If the patient has a resumable active session
+ *   (< 15 minutes inactivity), the SAME session is returned.
+ *
+ * - If no resumable session exists, a NEW session is created.
+ *
+ * In both cases the backend issues a fresh patient-session token.
+ *
+ * The frontend must treat the returned session as authoritative.
  */
 export async function createSession(patientId) {
   if (!patientId) {
@@ -26,23 +33,37 @@ export async function createSession(patientId) {
     }),
   });
 
-  /*
-   * The backend returns the raw patient token only when
-   * the session is created.
-   *
-   * Store it immediately so subsequent patient requests
-   * can authenticate against this consultation session.
-   */
-  if (!session?.patient_token) {
+  if (!session?.id) {
     throw new Error(
-      "Session was created, but no patient session credential was returned."
+      "Session was not created or resumed."
     );
   }
 
-  setPatientSessionToken(session.patient_token);
+  /*
+   * Every successful login receives a fresh patient-session
+   * credential, whether the backend created a new session
+   * or resumed an existing one.
+   */
+  if (!session?.patient_token) {
+    throw new Error(
+      "Session was created or resumed, but no patient session credential was returned."
+    );
+  }
+
+  /*
+   * Replace the old token immediately.
+   *
+   * This is especially important after kiosk/browser restart
+   * or patient re-login because the backend intentionally
+   * rotates the patient-session credential.
+   */
+  setPatientSessionToken(
+    session.patient_token
+  );
 
   return session;
 }
+
 
 /**
  * Assign a doctor to the current patient session.
@@ -63,10 +84,14 @@ export async function assignDoctorToSession(
   }
 
   if (!mode || !mode.trim()) {
-    throw new Error("Consultation mode is required.");
+    throw new Error(
+      "Consultation mode is required."
+    );
   }
 
-  const normalizedMode = mode.trim().toLowerCase();
+  const normalizedMode = mode
+    .trim()
+    .toLowerCase();
 
   if (
     normalizedMode !== "allopathy" &&
@@ -93,17 +118,25 @@ export async function assignDoctorToSession(
   );
 }
 
+
 /**
  * Fetch a single patient session using the
  * current patient-session credential.
+ *
+ * This is useful after restoring a session from
+ * the backend to verify its current lifecycle state.
  */
 export async function getSession(sessionId) {
   if (!sessionId) {
-    throw new Error("Session ID is required.");
+    throw new Error(
+      "Session ID is required."
+    );
   }
 
   return api(
-    `/sessions/${encodeURIComponent(sessionId)}`,
+    `/sessions/${encodeURIComponent(
+      sessionId
+    )}`,
     {
       method: "GET",
       auth: "patient",
@@ -111,12 +144,46 @@ export async function getSession(sessionId) {
   );
 }
 
+
+/**
+ * Complete the current patient consultation.
+ *
+ * The backend changes the session status from
+ * "active" to "completed".
+ *
+ * A completed session can never be resumed by
+ * the patient through createSession().
+ */
+export async function completeSession(
+  sessionId
+) {
+  if (!sessionId) {
+    throw new Error(
+      "Session ID is required."
+    );
+  }
+
+  return api(
+    `/sessions/${encodeURIComponent(
+      sessionId
+    )}/complete`,
+    {
+      method: "POST",
+      auth: "patient",
+    }
+  );
+}
+
+
 /**
  * End the local patient authentication state.
  *
- * The backend session lifecycle is handled by the
- * appropriate backend endpoint. This function only
- * removes the browser-held patient credential.
+ * This only removes the locally stored patient
+ * credential. It does NOT delete or complete the
+ * backend consultation session.
+ *
+ * The backend session remains resumable until its
+ * lifecycle rules expire it.
  */
 export function clearPatientSession() {
   clearPatientSessionToken();

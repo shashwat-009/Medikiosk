@@ -35,13 +35,42 @@ const BACKEND_DOCUMENT_TYPES = {
   other: "other",
 };
 
+function getErrorMessage(errorValue, language) {
+  if (!errorValue) {
+    return translate(language, "common.error");
+  }
+
+  if (typeof errorValue === "string") {
+    return errorValue;
+  }
+
+  if (errorValue instanceof Error) {
+    return errorValue.message;
+  }
+
+  if (typeof errorValue === "object") {
+    if (typeof errorValue.message === "string") {
+      return errorValue.message;
+    }
+
+    if (typeof errorValue.detail === "string") {
+      return errorValue.detail;
+    }
+
+    try {
+      return JSON.stringify(errorValue);
+    } catch {
+      return translate(language, "common.error");
+    }
+  }
+
+  return String(errorValue);
+}
+
 export default function Documents() {
   const navigate = useNavigate();
 
-  const {
-    state,
-    addDocument,
-  } = useKiosk();
+  const { state, addDocument } = useKiosk();
 
   const language = state.language || "en";
 
@@ -58,48 +87,19 @@ export default function Documents() {
     useState(false);
 
   /*
-   * =========================
-   * Add file locally
-   * =========================
+   * ============================================================
+   * Validate the current consultation context
+   * ============================================================
+   *
+   * Documents belong to the current patient + session.
+   *
+   * IMPORTANT:
+   * The session must still be ACTIVE while the patient is on
+   * this page. Interview completion does NOT complete the whole
+   * consultation. Final session completion belongs at the true
+   * end of the workflow.
    */
-
-  function handleFileAdd(file) {
-    if (!file) return;
-
-    setDocuments((current) => [
-      ...current,
-      {
-        id: `${Date.now()}-${file.name}`,
-        file,
-        type: documentType,
-      },
-    ]);
-
-    setError("");
-  }
-
-  /*
-   * =========================
-   * Remove local file
-   * =========================
-   */
-
-  function handleRemove(id) {
-    setDocuments((current) =>
-      current.filter(
-        (document) =>
-          document.id !== id
-      )
-    );
-  }
-
-  /*
-   * =========================
-   * Upload documents
-   * =========================
-   */
-
-  async function uploadDocuments() {
+  function validateSessionContext() {
     if (!state.patient?.id) {
       throw new Error(
         translate(
@@ -118,9 +118,75 @@ export default function Documents() {
       );
     }
 
+    if (
+      state.session.status &&
+      state.session.status !== "active"
+    ) {
+      throw new Error(
+        "This consultation session is no longer active. Please restart the consultation."
+      );
+    }
+  }
+
+  /*
+   * ============================================================
+   * Add file locally
+   * ============================================================
+   */
+  function handleFileAdd(file) {
+    if (!file || isUploading) {
+      return;
+    }
+
+    setDocuments((current) => [
+      ...current,
+      {
+        id: `${Date.now()}-${file.name}-${Math.random()
+          .toString(36)
+          .slice(2)}`,
+        file,
+        type: documentType,
+      },
+    ]);
+
+    setError("");
+  }
+
+  /*
+   * ============================================================
+   * Remove local file
+   * ============================================================
+   */
+  function handleRemove(id) {
+    if (isUploading) {
+      return;
+    }
+
+    setDocuments((current) =>
+      current.filter(
+        (document) =>
+          document.id !== id
+      )
+    );
+
+    setError("");
+  }
+
+  /*
+   * ============================================================
+   * Upload documents
+   * ============================================================
+   */
+  async function uploadDocuments() {
+    validateSessionContext();
+
     const uploadedDocuments = [];
 
     for (const document of documents) {
+      if (!document?.file) {
+        continue;
+      }
+
       const formData = new FormData();
 
       formData.append(
@@ -132,9 +198,11 @@ export default function Documents() {
         "session_id",
         String(state.session.id)
       );
+
       formData.append(
         "document_type",
-        BACKEND_DOCUMENT_TYPES[document.type] || "other"
+        BACKEND_DOCUMENT_TYPES[document.type] ||
+          "other"
       );
 
       formData.append(
@@ -147,13 +215,17 @@ export default function Documents() {
           formData
         );
 
+      if (!response?.id) {
+        throw new Error(
+          "The document upload did not return a document ID."
+        );
+      }
+
       uploadedDocuments.push(response);
 
       /*
-       * Store the backend document.
-       *
-       * Processing.jsx will use these
-       * backend IDs to start OCR processing.
+       * Keep the backend document ID in kiosk state.
+       * Processing.jsx can use these IDs for OCR/processing.
        */
       addDocument(response);
     }
@@ -162,42 +234,48 @@ export default function Documents() {
   }
 
   /*
-   * =========================
+   * ============================================================
    * Continue
-   * =========================
+   * ============================================================
    */
-
   async function handleContinue() {
-    setError("");
-
-    /*
-     * No documents → continue normally.
-     *
-     * Processing page can later be extended
-     * for AI summary generation.
-     */
-    if (documents.length === 0) {
-      navigate("/processing");
+    if (isUploading) {
       return;
     }
 
-    setIsUploading(true);
+    setError("");
 
     try {
+      /*
+       * Always validate the session before leaving this page,
+       * including when there are no documents.
+       */
+      validateSessionContext();
+
+      /*
+       * No documents is a valid choice.
+       * Do NOT complete the session here.
+       */
+      if (documents.length === 0) {
+        navigate("/processing");
+        return;
+      }
+
+      setIsUploading(true);
+
       await uploadDocuments();
 
       navigate("/processing");
     } catch (err) {
       console.error(
-        "Failed to upload documents:",
+        "Failed to continue from documents:",
         err
       );
 
       setError(
-        err.message ||
-        translate(
-          language,
-          "common.error"
+        getErrorMessage(
+          err,
+          language
         )
       );
     } finally {
@@ -206,26 +284,46 @@ export default function Documents() {
   }
 
   /*
-   * =========================
+   * ============================================================
    * Skip
-   * =========================
+   * ============================================================
    */
-
   function handleSkip() {
-    if (isUploading) return;
+    if (isUploading) {
+      return;
+    }
 
-    navigate("/processing");
+    setError("");
+
+    try {
+      validateSessionContext();
+      navigate("/processing");
+    } catch (err) {
+      console.error(
+        "Failed to skip documents:",
+        err
+      );
+
+      setError(
+        getErrorMessage(
+          err,
+          language
+        )
+      );
+    }
   }
 
   /*
-   * =========================
+   * ============================================================
    * Back
-   * =========================
+   * ============================================================
    */
-
   function handleBack() {
-    if (isUploading) return;
+    if (isUploading) {
+      return;
+    }
 
+    setError("");
     navigate("/interview");
   }
 
@@ -233,9 +331,9 @@ export default function Documents() {
     <main className="documents">
       <section className="documents__container">
 
-        {/* =========================
+        {/* =====================================================
             HEADER
-            ========================= */}
+            ===================================================== */}
 
         <header className="documents__header">
 
@@ -254,9 +352,9 @@ export default function Documents() {
 
         </header>
 
-        {/* =========================
+        {/* =====================================================
             INTRO
-            ========================= */}
+            ===================================================== */}
 
         <div className="documents__intro">
 
@@ -283,9 +381,9 @@ export default function Documents() {
 
         </div>
 
-        {/* =========================
+        {/* =====================================================
             DOCUMENT CARD
-            ========================= */}
+            ===================================================== */}
 
         <section className="documents__card">
 
@@ -305,10 +403,11 @@ export default function Documents() {
               <button
                 key={type.id}
                 type="button"
-                className={`documents__type ${documentType === type.id
+                className={`documents__type ${
+                  documentType === type.id
                     ? "documents__type--selected"
                     : ""
-                  }`}
+                }`}
                 onClick={() => {
                   setDocumentType(type.id);
                   setError("");
@@ -433,13 +532,13 @@ export default function Documents() {
 
               {isUploading
                 ? translate(
-                  language,
-                  "common.loading"
-                )
+                    language,
+                    "common.loading"
+                  )
                 : translate(
-                  language,
-                  "common.next"
-                )}
+                    language,
+                    "common.next"
+                  )}
 
               {!isUploading && (
                 <span>→</span>

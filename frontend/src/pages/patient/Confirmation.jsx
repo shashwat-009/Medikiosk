@@ -3,6 +3,12 @@ import { useNavigate } from "react-router-dom";
 
 import { useKiosk } from "../../context/KioskContext";
 import { translate } from "../../i18n";
+
+import {
+  completeSession,
+  clearPatientSession,
+} from "../../services/sessionService";
+
 import { api } from "../../services/api";
 
 import "./Confirmation.css";
@@ -13,34 +19,65 @@ export default function Confirmation() {
   const { state } = useKiosk();
 
   const language = state.language || "en";
+
   const session = state.session;
-  const sessionId = session?.id ?? session?.session_id ?? null;
+
+  const sessionId =
+    session?.id ??
+    session?.session_id ??
+    null;
 
   const [doctor, setDoctor] = useState(null);
+
+  const [isCompleting, setIsCompleting] =
+    useState(false);
+
+  const [completed, setCompleted] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  /*
+   * ============================================================
+   * Load assigned doctor
+   * ============================================================
+   */
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadAssignedDoctor() {
       if (!sessionId) {
-        setDoctor(null);
+        if (!cancelled) {
+          setDoctor(null);
+        }
+
         return;
       }
 
       try {
-        const doctorData = await api(
-          `/sessions/${encodeURIComponent(sessionId)}/doctor`,
-          {
-            method: "GET",
-            auth: "patient",
-          }
-        );
+        const doctorData =
+          await api(
+            `/sessions/${encodeURIComponent(
+              sessionId
+            )}/doctor`,
+            {
+              method: "GET",
+              auth: "patient",
+            }
+          );
 
         if (!cancelled) {
-          setDoctor(doctorData);
+          setDoctor(
+            doctorData
+          );
         }
-      } catch (error) {
-        console.error("Unable to load assigned doctor:", error);
+      } catch (doctorError) {
+        console.error(
+          "Unable to load assigned doctor:",
+          doctorError
+        );
 
         if (!cancelled) {
           setDoctor(null);
@@ -55,30 +92,187 @@ export default function Confirmation() {
     };
   }, [sessionId]);
 
-  function handleContinue() {
-    navigate("/");
+  /*
+   * ============================================================
+   * Complete consultation
+   * ============================================================
+   *
+   * IMPORTANT:
+   *
+   * This is the actual lifecycle transition:
+   *
+   * active → completed
+   *
+   * The backend remains the source of truth.
+   *
+   * We do NOT clear the patient token before the
+   * completion request succeeds.
+   */
+
+  async function handleContinue() {
+    /*
+     * Prevent double-click / duplicate completion requests.
+     */
+    if (
+      isCompleting ||
+      completed
+    ) {
+      return;
+    }
+
+    if (!sessionId) {
+      setError(
+        "No active consultation session was found."
+      );
+
+      return;
+    }
+
+    setError("");
+    setIsCompleting(true);
+
+    try {
+      console.log(
+        "CONFIRMATION: completing session",
+        sessionId
+      );
+
+      /*
+       * Complete the backend session.
+       */
+      const completedSession =
+        await completeSession(
+          sessionId
+        );
+
+      console.log(
+        "CONFIRMATION: session completed successfully",
+        completedSession
+      );
+
+      /*
+       * Only after the backend confirms completion
+       * do we consider the local workflow finished.
+       */
+      setCompleted(true);
+
+      /*
+       * Invalidate the patient authentication token.
+       *
+       * This prevents the completed patient's old
+       * credential from being reused after leaving
+       * the kiosk workflow.
+       */
+      clearPatientSession();
+
+      console.log(
+        "CONFIRMATION: patient session credential cleared"
+      );
+
+      /*
+       * Return to kiosk entry page.
+       *
+       * replace prevents the user from pressing Back
+       * and accidentally returning to the completed
+       * consultation.
+       */
+      navigate(
+        "/",
+        {
+          replace: true,
+        }
+      );
+    } catch (err) {
+      console.error(
+        "CONFIRMATION: failed to complete session",
+        err
+      );
+
+      let message =
+        translate(
+          language,
+          "common.error"
+        );
+
+      if (
+        typeof err === "string"
+      ) {
+        message = err;
+      } else if (
+        err instanceof Error
+      ) {
+        message =
+          err.message;
+      } else if (
+        err &&
+        typeof err.detail === "string"
+      ) {
+        message =
+          err.detail;
+      } else if (
+        err &&
+        typeof err.message === "string"
+      ) {
+        message =
+          err.message;
+      }
+
+      setError(
+        message ||
+          "Unable to complete the consultation."
+      );
+    } finally {
+      setIsCompleting(false);
+    }
   }
 
-  function getDoctorInitials(name) {
+  /*
+   * ============================================================
+   * Doctor initials
+   * ============================================================
+   */
+
+  function getDoctorInitials(
+    name
+  ) {
     if (!name) {
       return "D";
     }
 
-    const cleanName = name
-      .replace(/^Dr\.?\s*/i, "")
-      .trim();
+    const cleanName =
+      name
+        .replace(
+          /^Dr\.?\s*/i,
+          ""
+        )
+        .trim();
 
-    const parts = cleanName.split(/\s+/).filter(Boolean);
+    const parts =
+      cleanName
+        .split(/\s+/)
+        .filter(Boolean);
 
-    if (parts.length === 1) {
-      return parts[0].charAt(0).toUpperCase();
+    if (
+      parts.length === 1
+    ) {
+      return parts[0]
+        .charAt(0)
+        .toUpperCase();
     }
 
     return (
       parts[0].charAt(0) +
-      parts[parts.length - 1].charAt(0)
+      parts[
+        parts.length - 1
+      ].charAt(0)
     ).toUpperCase();
   }
+
+  /*
+   * ============================================================
+   * Render
+   * ============================================================
+   */
 
   return (
     <main className="confirmation">
@@ -117,7 +311,7 @@ export default function Confirmation() {
             )}
           </p>
 
-          {/* Assigned doctor — primary patient handoff */}
+          {/* Assigned doctor */}
 
           {doctor && (
             <section
@@ -145,7 +339,9 @@ export default function Confirmation() {
                   className="confirmation__doctor-icon"
                   aria-hidden="true"
                 >
-                  {getDoctorInitials(doctor.name)}
+                  {getDoctorInitials(
+                    doctor.name
+                  )}
                 </div>
 
                 <div className="confirmation__doctor-details">
@@ -155,14 +351,19 @@ export default function Confirmation() {
 
                   {doctor.specialization && (
                     <p className="confirmation__doctor-specialization">
-                      {doctor.specialization}
+                      {
+                        doctor.specialization
+                      }
                     </p>
                   )}
 
                   {doctor.department &&
-                    doctor.department !== doctor.specialization && (
+                    doctor.department !==
+                      doctor.specialization && (
                       <p className="confirmation__doctor-department">
-                        {doctor.department}
+                        {
+                          doctor.department
+                        }
                       </p>
                     )}
                 </div>
@@ -189,8 +390,11 @@ export default function Confirmation() {
           {/* Completion status */}
 
           <div className="confirmation__status">
+
             <div className="confirmation__status-item">
-              <span aria-hidden="true">✓</span>
+              <span aria-hidden="true">
+                ✓
+              </span>
 
               <p>
                 {translate(
@@ -201,7 +405,9 @@ export default function Confirmation() {
             </div>
 
             <div className="confirmation__status-item">
-              <span aria-hidden="true">✓</span>
+              <span aria-hidden="true">
+                ✓
+              </span>
 
               <p>
                 {translate(
@@ -212,7 +418,9 @@ export default function Confirmation() {
             </div>
 
             <div className="confirmation__status-item">
-              <span aria-hidden="true">✓</span>
+              <span aria-hidden="true">
+                ✓
+              </span>
 
               <p>
                 {translate(
@@ -221,21 +429,53 @@ export default function Confirmation() {
                 )}
               </p>
             </div>
+
           </div>
+
+          {/* Error */}
+
+          {error && (
+            <p
+              className="confirmation__error"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
 
           {/* Finish kiosk session */}
 
           <button
             type="button"
             className="confirmation__continue"
-            onClick={handleContinue}
+            onClick={
+              handleContinue
+            }
+            disabled={
+              isCompleting ||
+              completed
+            }
           >
-            {translate(
-              language,
-              "confirmation.continue"
-            )}
+            {isCompleting
+              ? translate(
+                  language,
+                  "common.loading"
+                )
+              : completed
+                ? "Completed"
+                : translate(
+                    language,
+                    "confirmation.continue"
+                  )}
 
-            <span aria-hidden="true">→</span>
+            {!isCompleting &&
+              !completed && (
+                <span
+                  aria-hidden="true"
+                >
+                  →
+                </span>
+              )}
           </button>
 
           {/* Patient reminder */}
@@ -246,6 +486,7 @@ export default function Confirmation() {
               "confirmation.note"
             )}
           </p>
+
         </div>
       </section>
     </main>

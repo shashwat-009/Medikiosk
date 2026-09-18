@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useKiosk } from "../../context/KioskContext";
 import { translate } from "../../i18n";
 import { createPatient } from "../../services/patientService";
-import { createSession } from "../../services/sessionService";
+import { createSession, getSession } from "../../services/sessionService";
+import { getSessionConsent } from "../../services/consentService";
 import VoiceButton from "../../components/kiosk/VoiceButton";
 import { speakText } from "../../services/ttsService";
 
@@ -130,7 +131,12 @@ function formatAadhaar(value) {
 
 export default function Identify() {
   const navigate = useNavigate();
-  const { state, setPatient, setSession } = useKiosk();
+  const {
+    state,
+    setPatient,
+    setSession,
+    setConsent,
+  } = useKiosk();
 
   const language = state.language || "en";
 
@@ -324,7 +330,78 @@ export default function Identify() {
       setPatient(patient);
 
       const session = await createSession(patient.id);
-      setSession(session);
+
+      if (!session?.id) {
+        throw new Error(
+          "Session creation failed: no session ID was returned."
+        );
+      }
+
+      /*
+       * --------------------------------------------------------
+       * Resume detection
+       * --------------------------------------------------------
+       *
+       * The backend intentionally returns the SAME session ID
+       * when an active consultation is still resumable.
+       *
+       * A session that already has a doctor assigned has already
+       * passed the consent + mode-selection stages. Therefore it
+       * is a resumed consultation and must go directly back to
+       * the interview instead of showing consent again.
+       *
+       * New / expired / completed consultations have no doctor
+       * assignment at this point and continue through the normal
+       * consent flow.
+       */
+      const isResumedSession =
+        session.status === "active" &&
+        Number.isInteger(Number(session.doctor_id)) &&
+        Number(session.doctor_id) > 0;
+
+      if (isResumedSession) {
+        /*
+         * Mark the session locally as resumed. This is useful to
+         * downstream pages without changing the backend contract.
+         */
+        setSession({
+          ...session,
+          resumed: true,
+        });
+
+        /*
+         * Restore consent in frontend state when possible.
+         * The session is already authorized and resumable, so a
+         * temporary failure here must NOT force the patient back
+         * through consent. The backend remains the source of truth.
+         */
+        try {
+          const existingConsent =
+            await getSessionConsent(session.id);
+
+          if (existingConsent) {
+            setConsent(existingConsent);
+          }
+        } catch (consentError) {
+          console.warn(
+            "Could not restore existing consent during session resume:",
+            consentError
+          );
+        }
+
+        navigate("/interview", { replace: true });
+        return;
+      }
+
+      /*
+       * This is a genuinely new consultation. Do not allow
+       * consent from an older consultation to leak into it.
+       */
+      setConsent(null);
+      setSession({
+        ...session,
+        resumed: false,
+      });
 
       navigate("/consent");
     } catch (err) {

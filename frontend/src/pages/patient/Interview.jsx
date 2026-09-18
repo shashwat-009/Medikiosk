@@ -7,6 +7,7 @@ import { translate } from "../../i18n";
 import {
   startConversation,
   submitConversationAnswer,
+  getNextConversationQuestion,
 } from "../../services/conversationService";
 
 import { createResponse } from "../../services/responseService";
@@ -63,6 +64,9 @@ export default function Interview() {
 
   const [isStarting, setIsStarting] =
     useState(false);
+
+  const [isRestoring, setIsRestoring] =
+    useState(true);
 
   const [questionNumber, setQuestionNumber] =
     useState(1);
@@ -166,6 +170,115 @@ export default function Interview() {
 
   /*
    * ============================================================
+   * Resume an already-started conversation
+   *
+   * The backend is the source of truth. A session with persisted
+   * conversation_state is resumed through /conversation/{id}/next.
+   * A 404 here means this is a brand-new session that has not yet
+   * started the interview, so the normal chief-complaint screen is
+   * shown.
+   *
+   * This is deliberately guarded with a ref because React StrictMode
+   * can invoke effects more than once during development.
+   * ============================================================
+   */
+
+  useEffect(() => {
+    const sessionId = state.session?.id;
+
+    if (!sessionId) {
+      setIsRestoring(false);
+      setError(
+        "No active session found. Please restart the visit."
+      );
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function restoreConversation() {
+      setIsRestoring(true);
+      setError("");
+
+      try {
+        const result =
+          await getNextConversationQuestion(sessionId);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (result?.completed || !result?.question) {
+          stopSpeech();
+          navigate("/documents", { replace: true });
+          return;
+        }
+
+        setConversationStarted(true);
+        setCurrentQuestion(result.question);
+        setChiefComplaint(
+          state.session?.complaint || ""
+        );
+
+        /*
+         * The backend state determines the actual question.
+         * We intentionally do not call startConversation here,
+         * because doing so would reset the DialogueManager state.
+         *
+         * questionNumber is a UI-only counter. The persisted backend
+         * state remains authoritative for the actual question.
+         */
+        setQuestionNumber(1);
+        setAnswer("");
+        setInputMode("idle");
+        setInputType("");
+        setAutoAdvanceSeconds(10);
+        setInactivitySeconds(60);
+        setIsPaused(false);
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        /*
+         * 404 means this session has no persisted conversation yet.
+         * That is the expected state immediately after patient login,
+         * before the chief complaint is submitted.
+         */
+        if (err?.status === 404 || err?.statusCode === 404) {
+          setConversationStarted(false);
+          setCurrentQuestion(null);
+          setChiefComplaint("");
+          setQuestionNumber(1);
+          setAnswer("");
+          setInputMode("idle");
+          setInputType("");
+          setError("");
+          return;
+        }
+
+        console.error(
+          "Failed to restore conversation:",
+          err
+        );
+
+        setError(formatError(err));
+      } finally {
+        if (!cancelled) {
+          setIsRestoring(false);
+        }
+      }
+    }
+
+    restoreConversation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.session?.id, navigate]);
+
+  /*
+   * ============================================================
    * Current question text
    * ============================================================
    */
@@ -181,18 +294,19 @@ export default function Interview() {
   /*
    * ============================================================
    * Question TTS
-   *
-   * Automatically speaks the current question whenever
-   * the question changes.
    * ============================================================
    */
 
   useEffect(() => {
+    if (isRestoring) {
+      return undefined;
+    }
+
     const questionText =
       displayQuestion?.trim();
 
     if (!questionText) {
-      return;
+      return undefined;
     }
 
     let cancelled = false;
@@ -222,6 +336,7 @@ export default function Interview() {
   }, [
     displayQuestion,
     language,
+    isRestoring,
   ]);
 
   /*
@@ -252,6 +367,12 @@ export default function Interview() {
         });
 
       if (!result?.question) {
+        if (result?.completed) {
+          stopSpeech();
+          navigate("/documents");
+          return;
+        }
+
         throw new Error(
           "The server did not return a first question."
         );
@@ -418,9 +539,9 @@ export default function Interview() {
 
   async function handleContinue(forcedAnswer = null) {
     const answerToUse =
-      forcedAnswer !== null ? forcedAnswer : answer;
+      forcedAnswer !== null ? forcedAnswer : answerRef.current;
 
-    if (!answerToUse.trim()) {
+    if (!String(answerToUse || "").trim()) {
       setError(
         translate(
           language,
@@ -439,6 +560,10 @@ export default function Interview() {
       return;
     }
 
+    if (isSubmittingRef.current || isStartingRef.current) {
+      return;
+    }
+
     setError("");
     setIsSubmitting(true);
 
@@ -449,7 +574,7 @@ export default function Interview() {
        * --------------------------------------------------------
        */
 
-      if (!conversationStarted) {
+      if (!conversationStartedRef.current) {
         await saveBackendResponse({
           question: {
             id: "chief_complaint",
@@ -457,14 +582,14 @@ export default function Interview() {
           },
 
           answerValue:
-            answerToUse,
+            String(answerToUse),
 
           type:
             inputType || "touch",
         });
 
         await startAdaptiveConversation(
-          answerToUse.trim()
+          String(answerToUse).trim()
         );
 
         setAnswer("");
@@ -483,7 +608,9 @@ export default function Interview() {
        * --------------------------------------------------------
        */
 
-      if (!currentQuestion) {
+      const questionAtSubmission = currentQuestion;
+
+      if (!questionAtSubmission) {
         throw new Error(
           "No current question is available."
         );
@@ -497,10 +624,10 @@ export default function Interview() {
 
       await saveBackendResponse({
         question:
-          currentQuestion,
+          questionAtSubmission,
 
         answerValue:
-          answerToUse,
+          String(answerToUse),
 
         type:
           inputType || "touch",
@@ -508,7 +635,9 @@ export default function Interview() {
 
       /*
        * --------------------------------------------------------
-       * Tell DialogueManager about the answer
+       * Tell DialogueManager about the answer.
+       * The backend loads the persisted DialogueState from the DB,
+       * processes the answer, and persists the new state.
        * --------------------------------------------------------
        */
 
@@ -518,14 +647,14 @@ export default function Interview() {
             state.session.id,
 
           fieldId:
-            currentQuestion.field_id,
+            questionAtSubmission.field_id,
 
           answer:
-            answerToUse.trim(),
+            String(answerToUse).trim(),
 
           questionId:
             getQuestionId(
-              currentQuestion
+              questionAtSubmission
             ),
 
           inputType:
@@ -603,7 +732,7 @@ export default function Interview() {
    */
 
   async function handleSkip() {
-    if (isSubmitting || isStarting) {
+    if (isSubmitting || isStarting || isRestoring) {
       return;
     }
 
@@ -628,8 +757,8 @@ export default function Interview() {
 
   // 1. Inactivity Timer (60s) - counts down when no answer has been given yet
   useEffect(() => {
-    if (answer.trim()) {
-      return;
+    if (isRestoring || answer.trim()) {
+      return undefined;
     }
 
     setInactivitySeconds(60);
@@ -639,6 +768,7 @@ export default function Interview() {
         inputModeRef.current === "listening" ||
         isSubmittingRef.current ||
         isStartingRef.current ||
+        isRestoring ||
         state.redFlag ||
         isPausedRef.current
       ) {
@@ -665,16 +795,17 @@ export default function Interview() {
   }, [
     currentQuestion,
     conversationStarted,
-    answer === "",
+    answer,
     language,
     state.redFlag,
+    isRestoring,
   ]);
 
   // 2. Countdown Timer (10s) - counts down once an answer is given
   useEffect(() => {
-    if (!answer.trim()) {
+    if (isRestoring || !answer.trim()) {
       setAutoAdvanceSeconds(10);
-      return;
+      return undefined;
     }
 
     setAutoAdvanceSeconds(10);
@@ -684,6 +815,7 @@ export default function Interview() {
         inputModeRef.current === "listening" ||
         isSubmittingRef.current ||
         isStartingRef.current ||
+        isRestoring ||
         state.redFlag ||
         isPausedRef.current
       ) {
@@ -708,6 +840,7 @@ export default function Interview() {
     currentQuestion,
     conversationStarted,
     state.redFlag,
+    isRestoring,
   ]);
 
   /*
@@ -719,7 +852,8 @@ export default function Interview() {
   function handleBack() {
     if (
       isSubmitting ||
-      isStarting
+      isStarting ||
+      isRestoring
     ) {
       return;
     }
@@ -746,6 +880,32 @@ export default function Interview() {
    * Safety
    * ============================================================
    */
+
+  if (isRestoring) {
+    return (
+      <main className="interview">
+        <section className="interview__container">
+          <div className="interview__intro">
+            <p className="interview__eyebrow">
+              {translate(
+                language,
+                "interview.eyebrow"
+              )}
+            </p>
+            <h1>
+              {translate(
+                language,
+                "common.loading"
+              )}
+            </h1>
+            <p>
+              Resuming your consultation…
+            </p>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   if (
     conversationStarted &&
@@ -862,7 +1022,8 @@ export default function Interview() {
               }
               disabled={
                 !displayQuestion ||
-                isStarting
+                isStarting ||
+                isRestoring
               }
               aria-label={translate(
                 language,
@@ -884,7 +1045,7 @@ export default function Interview() {
 
             <VoiceButton
               state={
-                isStarting
+                isStarting || isRestoring
                   ? "processing"
                   : inputMode
               }
@@ -1011,7 +1172,8 @@ export default function Interview() {
                   )}
                   disabled={
                     isSubmitting ||
-                    isStarting
+                    isStarting ||
+                    isRestoring
                   }
                 />
 
@@ -1093,7 +1255,8 @@ export default function Interview() {
               onClick={handleSkip}
               disabled={
                 isSubmitting ||
-                isStarting
+                isStarting ||
+                isRestoring
               }
             >
               <span>⏭️</span>
@@ -1115,7 +1278,8 @@ export default function Interview() {
               onClick={() => handleContinue()}
               disabled={
                 isSubmitting ||
-                isStarting
+                isStarting ||
+                isRestoring
               }
             >
 
