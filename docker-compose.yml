@@ -1,0 +1,91 @@
+services:
+  # ============================================================
+  # 1. Main Backend Service
+  # ============================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: medikiosk-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=MediKiosk
+      - APP_VERSION=0.2.0
+      - DATABASE_URL=sqlite:////app/data/medikiosk.db
+      - OCR_SERVICE_URL=http://ocr-service:8001
+      - SEMANTIC_SERVICE_URL=http://semantic-service:8002
+      - SARVAM_API_KEY=${SARVAM_API_KEY:-}
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-medikiosk_production_secret_key_change_me}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+    volumes:
+      - medikiosk-data:/app/data
+    depends_on:
+      ocr-service:
+        condition: service_healthy
+      semantic-service:
+        condition: service_healthy
+    networks:
+      - medikiosk-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ============================================================
+  # 2. OCR Service (Module B Document Intelligence)
+  # ============================================================
+  ocr-service:
+    build:
+      context: ./services/ocr-service
+      dockerfile: Dockerfile
+    container_name: medikiosk-ocr-service
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    networks:
+      - medikiosk-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ============================================================
+  # 3. Semantic AI Service (Multilingual Red-Flag Safety)
+  # ============================================================
+  semantic-service:
+    build:
+      context: ./services/semantic-service
+      dockerfile: Dockerfile
+    container_name: medikiosk-semantic-service
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      - huggingface-cache:/root/.cache/huggingface
+    networks:
+      - medikiosk-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+networks:
+  medikiosk-net:
+    driver: bridge
+
+volumes:
+  medikiosk-data:
+    driver: local
+  huggingface-cache:
+    driver: local

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_service_key: str
     jwt_secret_key: str
+    ocr_service_url: str = "http://ocr-service:8001"
+    semantic_service_url: str = "http://semantic-service:8002"
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

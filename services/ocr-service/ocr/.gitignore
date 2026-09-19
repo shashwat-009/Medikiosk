@@ -1,0 +1,112 @@
+# Python
+
+**pycache**/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual Environment
+
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables / secrets
+
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python packaging
+
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Testing / Coverage
+
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Logs
+
+*.log
+logs/
+
+# OCR / ML model caches
+
+.paddlex/
+.paddleocr/
+.cache/
+*.onnx
+*.pt
+*.pth
+*.safetensors
+
+# Temporary files
+
+tmp/
+temp/
+*.tmp
+
+# Medical document images
+
+# Do NOT commit real patient documents
+
+test_images/
+uploads/
+documents/
+medical_documents/
+
+# OCR output / generated files
+
+*_ocr.json
+ocr_output/
+ocr_results/
+lab_extraction_result.json
+
+# Generated reports
+
+reports/
+output/
+
+# Jupyter
+
+.ipynb_checkpoints/
+
+# Local databases
+
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets / credentials
+
+*.pem
+*.key
+credentials.json
+service-account.json
+google_credentials.json
+token.json
+secrets.json
+
+# Processed medical document images
+processed/
