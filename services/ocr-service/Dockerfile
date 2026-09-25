@@ -1,5 +1,5 @@
 # ============================================================
-# MediKiosk — OCR Microservice Dockerfile
+# MediSetu — OCR Microservice Dockerfile
 # Python 3.10 Linux Slim (CPU-only PaddlePaddle & PaddleOCR)
 # ============================================================
 

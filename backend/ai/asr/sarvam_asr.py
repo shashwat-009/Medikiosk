@@ -1,4 +1,4 @@
-"""Sarvam AI implementation of the MediKiosk ASR provider contract.
+"""Sarvam AI implementation of the MediSetu ASR provider contract.
 
 This module sends one local audio file to Sarvam's synchronous Speech-to-Text
 REST endpoint and translates its response into the provider-independent
@@ -113,7 +113,7 @@ class SarvamASRProvider(ASRProvider):
 
     def _build_multipart_body(self, audio_path: Path) -> tuple[bytes, str]:
         """Build Sarvam's required multipart form without an HTTP dependency."""
-        boundary = f"----MediKioskSarvam{uuid4().hex}"
+        boundary = f"----MediSetuSarvam{uuid4().hex}"
         separator = f"--{boundary}\r\n".encode()
         fields = {"model": self._model, "mode": self._mode}
         if self._language_code is not None:

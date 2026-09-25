@@ -1,5 +1,5 @@
 # ============================================================
-# MediKiosk — Main Backend Microservice Dockerfile
+# MediSetu — Main Backend Microservice Dockerfile
 # Python 3.11 Linux Slim
 # ============================================================
 

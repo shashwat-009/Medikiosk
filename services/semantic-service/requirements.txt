@@ -1,5 +1,5 @@
 # ============================================================
-# MediKiosk Semantic Inference Microservice Dependencies
+# MediSetu Semantic Inference Microservice Dependencies
 # Linux CPU-only environment (Python 3.11)
 # ============================================================
 

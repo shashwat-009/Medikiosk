@@ -436,7 +436,7 @@ def run_ocr(
 if __name__ == "__main__":
 
     print("=" * 60)
-    print("             MEDIKIOSK OCR TEST")
+    print("             MEDISETU OCR TEST")
     print("=" * 60)
 
     test_image = Path(

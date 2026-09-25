@@ -1,5 +1,5 @@
 """
-MediKiosk clinical summary integration service.
+MediSetu clinical summary integration service.
 
 Builds the deterministic clinical summary from:
 - patient interview responses

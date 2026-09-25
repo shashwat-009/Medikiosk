@@ -27,7 +27,7 @@ def _default_output_dir() -> Path:
     """Default location for generated audio: a dedicated subfolder under
     the system temp directory, so nothing is written inside the repo by
     default and no environment variable is required."""
-    return Path(tempfile.gettempdir()) / "medikiosk_tts"
+    return Path(tempfile.gettempdir()) / "medisetu_tts"
 
 
 @dataclass(frozen=True)

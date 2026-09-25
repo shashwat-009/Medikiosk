@@ -6,14 +6,14 @@ export default function KioskShell({ children }) {
       <header className="kiosk-header">
         <div className="kiosk-header__brand">
           <img
-            src="/medikiosk-logo.png"
-            alt="MediKiosk"
+            src="/medisetu-logo.png"
+            alt="MediSetu"
             className="kiosk-header__logo"
           />
 
           <div className="kiosk-header__text">
             <span className="kiosk-header__name">
-              MediKiosk
+              MediSetu
             </span>
 
             <span className="kiosk-header__subtitle">

@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="MediKiosk Semantic AI Service",
+    title="MediSetu Semantic AI Service",
     version="1.0.0",
     description="Multilingual Semantic Red-Flag Detection & Inference Microservice",
     lifespan=lifespan,

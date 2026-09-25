@@ -1,5 +1,5 @@
 # ============================================================
-# MediKiosk Backend - Runtime Dependencies
+# MediSetu Backend - Runtime Dependencies
 # Python 3.11+
 # ============================================================
 

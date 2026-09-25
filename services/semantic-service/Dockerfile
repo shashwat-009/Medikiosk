@@ -1,5 +1,5 @@
 # ============================================================
-# MediKiosk — Semantic Inference Microservice Dockerfile
+# MediSetu — Semantic Inference Microservice Dockerfile
 # Python 3.11 Linux Slim (CPU-only PyTorch & sentence-transformers)
 # ============================================================
 

@@ -1,5 +1,5 @@
 """
-Semantic red-flag detection for MediKiosk.
+Semantic red-flag detection for MediSetu.
 
 Local multilingual semantic safety layer used after deterministic rules.
 It does not diagnose, prescribe, generate text, or call an external API.

@@ -132,7 +132,7 @@ app.include_router(auth_router)
 @app.get("/")
 def root():
     return {
-        "message": "MediKiosk API is running",
+        "message": "MediSetu API is running",
         "status": "success"
     }
 

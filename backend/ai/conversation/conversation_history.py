@@ -1,5 +1,5 @@
 """
-Conversation history management for MediKiosk.
+Conversation history management for MediSetu.
 
 This module maintains an in-memory chronological collection of the
 project's existing DialogueTurn objects.

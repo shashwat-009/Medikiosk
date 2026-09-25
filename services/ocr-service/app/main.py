@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger("ocr-service")
 
 app = FastAPI(
-    title="MediKiosk OCR Service",
+    title="MediSetu OCR Service",
     version="1.0.0",
     description="Isolated Module B Document AI & Clinical Extraction Microservice",
 )

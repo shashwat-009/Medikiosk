@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Project structure:
 #
-# medikiosk/
+# medisetu/
 # ├── ai/
 # ├── backend/
 # │   ├── .env
@@ -18,7 +18,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 #
 # parents[0] = app/
 # parents[1] = backend/
-# parents[2] = medikiosk/
+# parents[2] = medisetu/
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 ENV_FILE = BASE_DIR / ".env"

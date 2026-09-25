@@ -157,7 +157,7 @@ def save_result(
 def main():
 
     print("=" * 60)
-    print("          MEDIKIOSK HANDWRITTEN OCR")
+    print("          MEDISETU HANDWRITTEN OCR")
     print("=" * 60)
 
     # --------------------------------------------------------

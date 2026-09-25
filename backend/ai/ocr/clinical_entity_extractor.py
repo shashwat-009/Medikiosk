@@ -1,5 +1,5 @@
 """
-MediKiosk Clinical Entity Extractor
+MediSetu Clinical Entity Extractor
 
 Consumes REAL OCR output from PaddleOCR.
 

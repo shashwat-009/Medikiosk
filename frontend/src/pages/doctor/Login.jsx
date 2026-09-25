@@ -80,13 +80,13 @@ export default function Login() {
 
           <div className="doctor-login-logo">
             <img
-              src="/medikiosk-logo.png"
-              alt="MediKiosk logo"
+              src="/medisetu-logo.png"
+              alt="MediSetu logo"
             />
           </div>
 
           <div className="doctor-brand-name">
-            MediKiosk
+            MediSetu
           </div>
 
           <div className="doctor-brand-line" />
@@ -203,7 +203,7 @@ export default function Login() {
 
 
           <div className="doctor-login-footer">
-            MediKiosk • Physician Portal
+            MediSetu • Physician Portal
           </div>
 
         </section>

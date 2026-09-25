@@ -1,5 +1,5 @@
 """
-Hybrid red-flag detection for MediKiosk.
+Hybrid red-flag detection for MediSetu.
 
 This module detects predefined safety indicators from patient-reported
 text using two layers:

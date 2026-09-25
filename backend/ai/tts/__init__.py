@@ -1,5 +1,5 @@
 """
-Public exports for the MediKiosk TTS (Text-to-Speech) package.
+Public exports for the MediSetu TTS (Text-to-Speech) package.
 
     Conversation / Question Generator
                 ↓

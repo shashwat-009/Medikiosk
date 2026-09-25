@@ -420,7 +420,7 @@ def classify_from_text(
 if __name__ == "__main__":
 
     print("=" * 60)
-    print("        MEDIKIOSK DOCUMENT CLASSIFIER")
+    print("        MEDISETU DOCUMENT CLASSIFIER")
     print("=" * 60)
 
     test_documents = {

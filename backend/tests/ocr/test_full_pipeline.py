@@ -22,7 +22,7 @@ from ai.ocr.document_classifier import classify_document
 from ai.ocr.clinical_entity_extractor import extract_clinical_entities
 
 
-TEST_DOCUMENT = Path("test_documents/medikiosk_b2_medical_test.pdf")
+TEST_DOCUMENT = Path("test_documents/medisetu_b2_medical_test.pdf")
 
 
 def print_section(title):
@@ -37,7 +37,7 @@ def main():
         print(f"ERROR: Test document not found: {TEST_DOCUMENT}")
         sys.exit(1)
 
-    print_section("MEDIKIOSK MODULE B - FULL PIPELINE TEST")
+    print_section("MEDISETU MODULE B - FULL PIPELINE TEST")
 
     print(f"Input document : {TEST_DOCUMENT}")
 

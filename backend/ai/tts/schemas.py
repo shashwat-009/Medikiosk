@@ -3,7 +3,7 @@ Provider-independent data contracts for the TTS (Text-to-Speech) subsystem.
 
 Mirrors the design philosophy of ``ai/asr/schemas.py``: a single
 standardized response type that every provider (Edge TTS today, Sarvam
-TTS later) must produce, so the rest of MediKiosk never needs to know
+TTS later) must produce, so the rest of MediSetu never needs to know
 which provider generated a given audio file.
 
 This module does NOT perform synthesis, does NOT call any provider, and
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SupportedLanguage(str, Enum):
-    """Languages MediKiosk's TTS layer supports, by BCP-47 locale code."""
+    """Languages MediSetu's TTS layer supports, by BCP-47 locale code."""
 
     HINDI = "hi-IN"
     ENGLISH = "en-IN"

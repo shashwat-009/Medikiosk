@@ -1,5 +1,5 @@
 """
-AYUSH-specific history-taking layer for MediKiosk.
+AYUSH-specific history-taking layer for MediSetu.
 
 This module is intentionally a thin domain layer over the existing
 conversation engine.

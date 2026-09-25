@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 # ============================================================
-# MEDIKIOSK - HANDWRITTEN LINE DETECTION
+# MEDISETU - HANDWRITTEN LINE DETECTION
 # Mixed document:
 # Printed heading + handwritten content
 # ============================================================
@@ -309,7 +309,7 @@ def detect_lines(input_path, output_dir):
 def main():
 
     print("=" * 60)
-    print("      MEDIKIOSK - HANDWRITTEN LINE DETECTION")
+    print("      MEDISETU - HANDWRITTEN LINE DETECTION")
     print("=" * 60)
 
     print()

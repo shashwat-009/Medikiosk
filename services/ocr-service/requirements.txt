@@ -1,5 +1,5 @@
 # ============================================================
-# MediKiosk OCR Microservice Dependencies
+# MediSetu OCR Microservice Dependencies
 # Linux CPU-only environment (Python 3.10)
 # ============================================================
 

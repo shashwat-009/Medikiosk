@@ -1,5 +1,5 @@
 """
-Clinical History Ontology for MediKiosk.
+Clinical History Ontology for MediSetu.
 
 This module defines the clinical information that is relevant to
 different chief complaints.

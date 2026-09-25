@@ -1,8 +1,8 @@
 """
-MediKiosk ASR (Automatic Speech Recognition) module.
+MediSetu ASR (Automatic Speech Recognition) module.
 
 Provides provider-independent speech-to-text functionality
-for the MediKiosk clinical history-taking platform.
+for the MediSetu clinical history-taking platform.
 """
 
 from .schemas import ASRResponse

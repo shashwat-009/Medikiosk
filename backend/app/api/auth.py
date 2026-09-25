@@ -138,7 +138,7 @@ def admin_login(
     form_data: OAuth2PasswordRequestForm = Depends(),
 ):
     """
-    Authenticate the MediKiosk admin.
+    Authenticate the MediSetu admin.
 
     Admin credentials are stored in backend/.env.
     """
@@ -179,7 +179,7 @@ def admin_login(
 
 def decode_token(token: str):
     """
-    Decode and validate a MediKiosk JWT.
+    Decode and validate a MediSetu JWT.
     """
 
     credentials_exception = HTTPException(

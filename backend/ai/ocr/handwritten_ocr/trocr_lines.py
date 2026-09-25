@@ -9,7 +9,7 @@ from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
 
 # ============================================================
-# MEDIKIOSK - IMPROVED TrOCR LINE RECOGNITION
+# MEDISETU - IMPROVED TrOCR LINE RECOGNITION
 # ============================================================
 
 MODEL_NAME = "microsoft/trocr-base-handwritten"
@@ -455,7 +455,7 @@ def main():
 
     print("=" * 60)
     print(
-        "       MEDIKIOSK - TrOCR LINE RECOGNITION"
+        "       MEDISETU - TrOCR LINE RECOGNITION"
     )
     print("=" * 60)
 
