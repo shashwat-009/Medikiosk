@@ -1,4 +1,4 @@
-"""MediKiosk deterministic clinical summary layer."""
+"""MediSetu deterministic clinical summary layer."""
 from .schemas import (
     SourceType,
     Provenance,

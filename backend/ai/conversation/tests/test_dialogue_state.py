@@ -1,4 +1,4 @@
-"""Unit tests for MediKiosk Dialogue State."""
+"""Unit tests for MediSetu Dialogue State."""
 
 import pytest
 

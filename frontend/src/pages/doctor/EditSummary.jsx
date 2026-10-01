@@ -550,12 +550,12 @@ export default function EditSummary() {
           </button>
 
           <img
-            src="/medikiosk-logo.png"
+            src="/medisetu-logo.png"
             alt=""
           />
 
           <div>
-            <strong>MediKiosk</strong>
+            <strong>MediSetu</strong>
             <span>Clinical Review</span>
           </div>
         </div>

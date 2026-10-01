@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { api, clearDoctorAccessToken } from "../../services/api";
+import { api, clearDoctorAccessToken, getApiBaseUrl } from "../../services/api";
 
 import "./doctor.css";
 
@@ -1453,13 +1453,13 @@ export default function SessionReview() {
 
 
           {/* ==================================================
-              MEDIKIOSK LOGO
+              MEDISETU LOGO
               ================================================== */}
 
           <div className="doctor-brand-mini">
             <img
-              src="/medikiosk-logo.png"
-              alt="MediKiosk logo"
+              src="/medisetu-logo.png"
+              alt="MediSetu logo"
             />
           </div>
 
@@ -1467,7 +1467,7 @@ export default function SessionReview() {
           <div>
 
             <div className="doctor-topbar__title">
-              MediKiosk
+              MediSetu
             </div>
 
             <div className="doctor-topbar__subtitle">
@@ -2185,12 +2185,8 @@ export default function SessionReview() {
                         type="button"
                         className="doctor-document-view-button"
                         onClick={() => {
-                          const apiBaseUrl =
-                            import.meta.env.VITE_API_BASE_URL ??
-                            "http://localhost:8000";
-
                           window.open(
-                            `${apiBaseUrl}/documents/${document.id}/file`,
+                            `${getApiBaseUrl()}/documents/${document.id}/file`,
                             "_blank",
                             "noopener,noreferrer"
                           );

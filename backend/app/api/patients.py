@@ -123,7 +123,7 @@ def get_authenticated_actor(
     db: Session,
 ):
     """
-    Validate an optional MediKiosk JWT.
+    Validate an optional MediSetu JWT.
 
     Returns:
         ("admin", None)

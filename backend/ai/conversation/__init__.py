@@ -1,5 +1,5 @@
 """
-Public exports for the MediKiosk conversation package.
+Public exports for the MediSetu conversation package.
 
 Re-exports the schema types from ``ai.conversation.schemas`` so future
 sibling modules (ontology.py, question_bank.py, dialogue_state.py,

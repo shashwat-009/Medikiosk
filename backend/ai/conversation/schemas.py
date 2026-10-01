@@ -1,5 +1,5 @@
 """
-Provider-independent data contracts for the MediKiosk conversation layer
+Provider-independent data contracts for the MediSetu conversation layer
 (the adaptive clinical-history-taking engine).
 
 This module defines the *shape* of conversation state, questions, answers,

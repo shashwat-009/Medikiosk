@@ -219,7 +219,7 @@ export default function Confirmation() {
 
       setError(
         message ||
-          "Unable to complete the consultation."
+        "Unable to complete the consultation."
       );
     } finally {
       setIsCompleting(false);
@@ -359,7 +359,7 @@ export default function Confirmation() {
 
                   {doctor.department &&
                     doctor.department !==
-                      doctor.specialization && (
+                    doctor.specialization && (
                       <p className="confirmation__doctor-department">
                         {
                           doctor.department
@@ -454,17 +454,10 @@ export default function Confirmation() {
               "confirmation.continue"
             )}
           >
-            {isCompleting
-              ? translate(
-                  language,
-                  "common.loading"
-                )
-              : completed
-                ? "Completed"
-                : translate(
-                    language,
-                    "confirmation.continue"
-                  )}
+            {translate(
+              language,
+              "confirmation.continue"
+            )}
 
             <span data-no-tts aria-hidden="true">→</span>
           </button>

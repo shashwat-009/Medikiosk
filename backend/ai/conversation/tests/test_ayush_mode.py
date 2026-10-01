@@ -1,4 +1,4 @@
-"""Focused tests for the MediKiosk AYUSH conversation layer."""
+"""Focused tests for the MediSetu AYUSH conversation layer."""
 
 from __future__ import annotations
 

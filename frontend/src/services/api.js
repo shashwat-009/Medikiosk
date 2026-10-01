@@ -7,7 +7,7 @@ const DOCTOR_TOKEN_KEY = "doctorAccessToken";
 /**
  * Get the configured backend URL without trailing slashes.
  */
-function getApiBaseUrl() {
+export function getApiBaseUrl() {
   return API_BASE_URL.replace(/\/+$/, "");
 }
 
@@ -250,13 +250,13 @@ export async function api(path, options = {}) {
   }
 
   /*
-   * All MediKiosk API calls must go through the
+   * All MediSetu API calls must go through the
    * configured backend. This prevents accidental
    * credential leakage to an arbitrary external URL.
    */
   if (/^https?:\/\//i.test(path)) {
     throw new Error(
-      "API paths must be relative to the configured MediKiosk backend."
+      "API paths must be relative to the configured MediSetu backend."
     );
   }
 
@@ -288,7 +288,7 @@ export async function api(path, options = {}) {
      * browser-specific fetch errors.
      */
     const networkError = new Error(
-      "Unable to connect to the MediKiosk backend. Please check that the server is running."
+      "Unable to connect to the MediSetu backend. Please check that the server is running."
     );
 
     networkError.cause = error;
@@ -311,7 +311,7 @@ export async function api(path, options = {}) {
     response.headers.get("content-type") || "";
 
   /*
-   * Normal MediKiosk API responses are JSON.
+   * Normal MediSetu API responses are JSON.
    */
   if (
     contentType

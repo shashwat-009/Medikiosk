@@ -1,5 +1,5 @@
 """
-MediKiosk Question Bank.
+MediSetu Question Bank.
 
 Provides deterministic, curated questions for clinical history-taking.
 

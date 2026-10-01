@@ -1,5 +1,5 @@
 """
-Hybrid red-flag detection for MediKiosk.
+Hybrid red-flag detection for MediSetu.
 
 This module detects predefined safety indicators from patient-reported
 text using two layers:
@@ -23,15 +23,31 @@ The semantic layer is only used when no deterministic rule matches.
 
 from __future__ import annotations
 
+import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import Any
 
 from .schemas import RedFlagPriority, RedFlagResult
-from .semantic_red_flags import (
-    SemanticRedFlagResult,
-    get_semantic_red_flag_detector,
-)
+
+logger = logging.getLogger(__name__)
+
+try:
+    from .semantic_red_flags import (
+        SemanticRedFlagResult,
+        get_semantic_red_flag_detector,
+    )
+except ImportError:
+    get_semantic_red_flag_detector = None
+
+    @dataclass(frozen=True)
+    class SemanticRedFlagResult:
+        detected: bool = False
+        category: str | None = None
+        score: float | None = None
+        matched_text: str | None = None
+        explanation: str | None = None
 
 
 @dataclass(frozen=True)
@@ -736,12 +752,69 @@ class RedFlagDetector:
         if not self.use_semantic:
             return None
 
-        if self._semantic_detector is None:
+        if self._semantic_detector is None and get_semantic_red_flag_detector is not None:
             self._semantic_detector = (
                 get_semantic_red_flag_detector()
             )
 
         return self._semantic_detector
+
+    def _detect_semantic(self, text: str) -> SemanticRedFlagResult | None:
+        """
+        Run semantic detection via internal microservice if configured,
+        or fallback to local model if available.
+        """
+        if not self.use_semantic:
+            return None
+
+        # 1. Try internal HTTP service
+        service_url = None
+        try:
+            from app.config import settings
+            service_url = getattr(settings, "semantic_service_url", None)
+        except Exception:
+            pass
+
+        if not service_url:
+            service_url = os.getenv("SEMANTIC_SERVICE_URL")
+
+        if service_url:
+            endpoint = service_url.rstrip("/") + "/predict"
+            try:
+                import httpx
+                with httpx.Client(timeout=4.0) as client:
+                    resp = client.post(endpoint, json={"text": text})
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return SemanticRedFlagResult(
+                            detected=data.get("detected", False),
+                            category=data.get("category"),
+                            score=data.get("score"),
+                            matched_text=data.get("matched_text"),
+                            explanation=data.get("explanation"),
+                        )
+                    else:
+                        logger.warning(
+                            "Semantic service responded with HTTP %d: %s",
+                            resp.status_code,
+                            resp.text,
+                        )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to query semantic service at %s: %s",
+                    endpoint,
+                    exc,
+                )
+
+        # 2. Local fallback if model is available
+        local_detector = self._get_semantic_detector()
+        if local_detector is not None:
+            try:
+                return local_detector.detect(text)
+            except Exception as exc:
+                logger.warning("Local semantic detector failed: %s", exc)
+
+        return None
 
     # ------------------------------------------------------------------
     # Main detection
@@ -874,18 +947,15 @@ class RedFlagDetector:
             )
 
             if not is_contextual_description and not is_semantic_negation:
-                semantic_detector = self._get_semantic_detector()
+                semantic_result = self._detect_semantic(
+                    normalized_text
+                )
 
-                if semantic_detector is not None:
-                    semantic_result = semantic_detector.detect(
-                        normalized_text
+                if semantic_result is not None and semantic_result.detected:
+                    return self._detected_semantic_flag(
+                        semantic_result=semantic_result,
+                        matched_text=text,
                     )
-
-                    if semantic_result.detected:
-                        return self._detected_semantic_flag(
-                            semantic_result=semantic_result,
-                            matched_text=text,
-                        )
 
         return self._no_flag()
 

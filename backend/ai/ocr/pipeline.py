@@ -1,5 +1,5 @@
 """
-MediKiosk Module B - Unified Document AI Pipeline
+MediSetu Module B - Unified Document AI Pipeline
 
 Pipeline:
 
@@ -672,12 +672,12 @@ if __name__ == "__main__":
 
     print("=" * 60)
     print(
-        "       MEDIKIOSK MODULE B DOCUMENT AI PIPELINE"
+        "       MEDISETU MODULE B DOCUMENT AI PIPELINE"
     )
     print("=" * 60)
 
     test_file = Path(
-        "test_documents/medikiosk_b2_medical_test.pdf"
+        "test_documents/medisetu_b2_medical_test.pdf"
     )
 
     if not test_file.exists():

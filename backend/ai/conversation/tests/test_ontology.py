@@ -1,4 +1,4 @@
-"""Tests for the MediKiosk clinical history ontology."""
+"""Tests for the MediSetu clinical history ontology."""
 
 import json
 

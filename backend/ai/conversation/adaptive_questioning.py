@@ -1,5 +1,5 @@
 """
-Deterministic adaptive questioning for the MediKiosk conversation layer.
+Deterministic adaptive questioning for the MediSetu conversation layer.
 
 This module keeps the existing AdaptiveQuestioning public API while upgrading
 question selection from a simple "first missing field" walk into a
@@ -539,7 +539,7 @@ class AdaptiveQuestioning:
         The method first honors explicit dependency metadata if a future
         ontology/question implementation provides it. Built-in complaint
         rules then cover the branching already representable by the current
-        MediKiosk MVP question bank.
+        MediSetu MVP question bank.
         """
 
         field_id = self._field_id(field)

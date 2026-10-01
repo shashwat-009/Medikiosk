@@ -1,5 +1,5 @@
 """
-MediKiosk — extensive backend API test suite.
+MediSetu — extensive backend API test suite.
 
 Place this file at:
     backend/tests/test_api.py
@@ -11,7 +11,7 @@ Recommended first run:
     pytest -q -x
 
 IMPORTANT:
-- This suite is designed for the current MediKiosk API architecture.
+- This suite is designed for the current MediSetu API architecture.
 - It uses FastAPI TestClient, so no browser/Swagger clicking is needed.
 - External AI/storage services are mocked where possible.
 - The tests create dedicated test records with unique Aadhaar values.
@@ -35,7 +35,7 @@ from types import SimpleNamespace
 # ---------------------------------------------------------------------------
 # Project layout:
 #
-#   medikiosk/
+#   medisetu/
 #   ├── ai/
 #   └── backend/
 #       ├── app/
@@ -109,9 +109,9 @@ def test_values():
         "admin_username": admin_username,
         "admin_password": admin_password,
         "doctor1_name": f"TEST Physician One {RUN_ID}",
-        "doctor1_password": "MediKiosk-Test#123",
+        "doctor1_password": "MediSetu-Test#123",
         "doctor2_name": f"TEST Physician Two {RUN_ID}",
-        "doctor2_password": "MediKiosk-Test#456",
+        "doctor2_password": "MediSetu-Test#456",
         "aadhaar1": f"91{RUN_ID}1234"[-12:],
         "aadhaar2": f"92{RUN_ID}5678"[-12:],
     }
@@ -494,7 +494,7 @@ def test_admin_can_update_doctor(client, admin_token, doctors):
         headers=auth(admin_token),
         json={
             "name": doctors["one"]["name"],
-            "password": "MediKiosk-Test#123",
+            "password": "MediSetu-Test#123",
             "specialization": "Internal Medicine",
             "department": "General Medicine",
         },
@@ -510,7 +510,7 @@ def test_physician_cannot_update_doctor(client, doctors, physician_tokens):
         headers=auth(physician_tokens["one"]),
         json={
             "name": "Unauthorized Update",
-            "password": "MediKiosk-Test#123",
+            "password": "MediSetu-Test#123",
             "specialization": "Hacker",
             "department": "Hacker",
         },

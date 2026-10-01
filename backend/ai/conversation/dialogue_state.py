@@ -1,5 +1,5 @@
 """
-MediKiosk Dialogue State Management.
+MediSetu Dialogue State Management.
 
 Responsibilities:
     - Maintain the current structured clinical interview state.
@@ -144,7 +144,7 @@ class DialogueStateSnapshot:
 @dataclass
 class DialogueState:
     """
-    Current memory/state of a MediKiosk clinical interview.
+    Current memory/state of a MediSetu clinical interview.
 
     DialogueState stores information; it does not decide what happens next.
 

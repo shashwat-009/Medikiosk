@@ -250,14 +250,14 @@ export default function Dashboard() {
 
           <div className="doctor-brand-mini">
             <img
-              src="/medikiosk-logo.png"
-              alt="MediKiosk"
+              src="/medisetu-logo.png"
+              alt="MediSetu"
             />
           </div>
 
           <div>
             <div className="doctor-topbar__title">
-              MediKiosk
+              MediSetu
             </div>
 
             <div className="doctor-topbar__subtitle">

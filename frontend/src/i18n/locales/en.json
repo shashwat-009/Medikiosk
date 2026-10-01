@@ -2,7 +2,7 @@
   "welcome": {
     "eyebrow": "PRE-CONSULT CLINICAL INTAKE · OPD WAITING AREA",
     "title": "Your history, taken before the doctor calls you in.",
-    "description": "Speak or tap in your own language. MediKiosk helps collect your medical history and documents before your consultation.",
+    "description": "Speak or tap in your own language. MediSetu helps collect your medical history and documents before your consultation.",
     "chooseLanguage": "Choose your language",
     "languageHint": "Choose your preferred language",
     "needHelp": "Need help? Call Kiosk Mitra"
@@ -49,7 +49,7 @@
     "title": "Your consent",
     "description": "Please review the information below and provide your consent before continuing.",
     "captureTitle": "Health information collection",
-    "capture": "I consent to MediKiosk collecting and recording the information I provide during this visit.",
+    "capture": "I consent to MediSetu collecting and recording the information I provide during this visit.",
     "sharingTitle": "Information sharing",
     "sharing": "I consent to sharing my information with the healthcare team for my consultation.",
     "notice": "You can ask the healthcare team about how your information is used.",

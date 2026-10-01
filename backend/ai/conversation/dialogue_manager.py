@@ -1,5 +1,5 @@
 """
-MediKiosk Conversation Orchestrator.
+MediSetu Conversation Orchestrator.
 
 Coordinates:
     DialogueState

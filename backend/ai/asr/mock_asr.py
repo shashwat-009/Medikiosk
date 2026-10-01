@@ -1,7 +1,7 @@
 """
 Deterministic Mock ASR provider for local development and testing.
 
-This provider lets the rest of MediKiosk (the Conversation Module, tests,
+This provider lets the rest of MediSetu (the Conversation Module, tests,
 demos) be built and exercised WITHOUT:
     - a Sarvam API key
     - an internet connection

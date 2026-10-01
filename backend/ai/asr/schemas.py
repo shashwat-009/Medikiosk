@@ -23,7 +23,7 @@ class ASRResponse(BaseModel):
     """
     Standardized result returned by ANY ASR provider.
 
-    This is the single contract the rest of MediKiosk (e.g. the Conversation
+    This is the single contract the rest of MediSetu (e.g. the Conversation
     Module) should depend on. Provider-specific response formats (Sarvam's
     raw API payload, etc.) must be translated into this model inside the
     provider's own module and never leaked outside the ASR package.

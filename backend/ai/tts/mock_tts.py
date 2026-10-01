@@ -1,7 +1,7 @@
 """
 Deterministic Mock TTS provider for local development and testing.
 
-Lets the rest of MediKiosk be built and tested without any network access
+Lets the rest of MediSetu be built and tested without any network access
 or real audio synthesis, mirroring ``ai/asr/mock_asr.py``'s role for ASR.
 """
 

@@ -1,6 +1,4 @@
-const API_BASE_URL =
-  import.meta.env?.VITE_API_BASE_URL ??
-  "http://localhost:8000";
+import { getApiBaseUrl } from "./api";
 
 const LANGUAGE_MAP = {
   en: "en-IN",
@@ -43,7 +41,7 @@ async function generateAudio(text, languageCode) {
   }
 
   const request = fetch(
-    `${API_BASE_URL}/tts/synthesize`,
+    `${getApiBaseUrl()}/tts/synthesize`,
     {
       method: "POST",
       headers: {

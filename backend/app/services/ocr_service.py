@@ -3,11 +3,17 @@ import os
 import tempfile
 from datetime import datetime
 
+import httpx
 from sqlalchemy.orm import Session
 
-from ai.ocr.pipeline import process_document
+from app.config import settings
 from app.models.document import Document
 from app.services.storage_service import download_document
+
+try:
+    from ai.ocr.pipeline import process_document as local_process_document
+except ImportError:
+    local_process_document = None
 
 
 def process_document_ocr(
@@ -86,12 +92,40 @@ def process_document_ocr(
         try:
 
             # ====================================================
-            # RUN CANONICAL OCR PIPELINE
+            # RUN CANONICAL OCR PIPELINE (SERVICE OR LOCAL)
             # ====================================================
 
-            result = process_document(
-                temporary_file_path
-            )
+            result = None
+            ocr_url = getattr(settings, "ocr_service_url", None) or os.getenv("OCR_SERVICE_URL")
+
+            if ocr_url:
+                clean_url = ocr_url.rstrip("/") + "/process"
+                try:
+                    with open(temporary_file_path, "rb") as f:
+                        filename = document.filename or os.path.basename(temporary_file_path)
+                        files = {"file": (filename, f, "application/octet-stream")}
+                        with httpx.Client(timeout=120.0) as client:
+                            response = client.post(clean_url, files=files)
+                            if response.status_code == 200:
+                                result = response.json()
+                            else:
+                                raise RuntimeError(
+                                    f"OCR service responded with status {response.status_code}: {response.text}"
+                                )
+                except (httpx.ConnectError, httpx.TimeoutException) as net_err:
+                    if local_process_document is not None:
+                        result = local_process_document(temporary_file_path)
+                    else:
+                        raise RuntimeError(
+                            f"OCR service at {clean_url} is unavailable: {net_err}"
+                        ) from net_err
+
+            elif local_process_document is not None:
+                result = local_process_document(temporary_file_path)
+            else:
+                raise RuntimeError(
+                    "OCR service URL is not configured and local OCR pipeline is not installed."
+                )
 
             if not result:
                 raise RuntimeError(
